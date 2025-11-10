@@ -186,233 +186,240 @@ if ($classe_id > 0 && $periode_id > 0) {
 }
 
 // Afficher les messages d'erreur s'il y en a
-if ($error): ?>
-    <div class="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
-        <div class="flex">
-            <div class="flex-shrink-0">
-                <i class="fas fa-exclamation-circle text-red-400"></i>
-            </div>
-            <div class="ml-3">
-                <p class="text-sm text-red-700">
-                    <?php echo $error; ?>
-                </p>
-            </div>
-        </div>
-    </div>
-<?php endif; ?>
+if (!empty($error)) {
+    echo '<div class="bg-red-50 border-l-4 border-red-400 p-4 mb-6">';
+    echo '    <div class="flex">';
+    echo '        <div class="flex-shrink-0">';
+    echo '            <i class="fas fa-exclamation-circle text-red-400"></i>';
+    echo '        </div>';
+    echo '        <div class="ml-3">';
+    echo '            <p class="text-sm text-red-700">';
+    echo '                ' . htmlspecialchars($error);
+    echo '            </p>';
+    echo '        </div>';
+    echo '    </div>';
+    echo '</div>';
+}
 
-<div class="bg-white p-6 rounded-lg shadow mb-8">
-    <div class="flex justify-between items-center mb-6">
-        <h2 class="text-xl font-semibold">Générer les bulletins de notes</h2>
-    </div>
-    
-    <form method="GET" class="space-y-4">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-                <label for="classe_id" class="block text-sm font-medium text-gray-700">Classe</label>
-                <select id="classe_id" name="classe_id" required
-                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                    <option value="">Sélectionner une classe</option>
-                    <?php foreach ($classes as $classe): ?>
-                        <option value="<?php echo $classe['id']; ?>" <?php echo $classe_id == $classe['id'] ? 'selected' : ''; ?>>
-                            <?php echo htmlspecialchars($classe['nom'] . ' ' . $classe['niveau']); ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            
-            <div>
-                <label for="periode_id" class="block text-sm font-medium text-gray-700">Période d'évaluation</label>
-                <select id="periode_id" name="periode_id" required
-                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                    <option value="">Sélectionner une période</option>
-                    <?php foreach ($periodes as $periode): ?>
-                        <option value="<?php echo $periode['id']; ?>" <?php echo $periode_id == $periode['id'] ? 'selected' : ''; ?>>
-                            <?php echo htmlspecialchars($periode['nom']); ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            
-            <div class="flex items-end">
-                <button type="submit"
-                        class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                    <i class="fas fa-search mr-2"></i> Afficher
-                </button>
+echo '<div class="bg-white p-6 rounded-lg shadow mb-8">';
+echo '    <div class="flex justify-between items-center mb-6">';
+echo '        <h2 class="text-xl font-semibold">Générer les bulletins de notes</h2>';
+echo '    </div>';
+echo '    ';
+echo '    <form method="GET" class="space-y-4">';
+echo '        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">';
+echo '            <div>';
+echo '                <label for="classe_id" class="block text-sm font-medium text-gray-700">Classe</label>';
+echo '                <select id="classe_id" name="classe_id" required';
+echo '                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">';
+echo '                    <option value="">Sélectionner une classe</option>';
+
+foreach ($classes as $classe) {
+    $selected = ($classe_id == $classe['id']) ? 'selected' : '';
+    echo '                    <option value="' . $classe['id'] . '" ' . $selected . '>';
+    echo htmlspecialchars($classe['nom'] . ' ' . $classe['niveau']);
+    echo '</option>';
+}
+
+echo '                </select>';
+echo '            </div>';
+echo '            ';
+echo '            <div>';
+echo '                <label for="periode_id" class="block text-sm font-medium text-gray-700">Période d\'évaluation</label>';
+echo '                <select id="periode_id" name="periode_id" required';
+echo '                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">';
+echo '                    <option value="">Sélectionner une période</option>';
+
+foreach ($periodes as $periode) {
+    $selected = ($periode_id == $periode['id']) ? 'selected' : '';
+    echo '                    <option value="' . $periode['id'] . '" ' . $selected . '>';
+    echo htmlspecialchars($periode['nom']);
+    echo '</option>';
+}
+
+echo '                </select>';
+echo '            </div>';
+echo '            ';
+echo '            <div class="flex items-end">';
+echo '                <button type="submit"';
+echo '                        class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">';
+echo '                    <i class="fas fa-search mr-2"></i> Afficher';
+echo '                </button>';
+
+if ($classe_id > 0 && $periode_id > 0 && !empty($eleves)) {
+    echo '                <a href="generer_bulletin_pdf.php?classe_id=' . $classe_id . '&periode_id=' . $periode_id . '" ';
+    echo '                   target="_blank"';
+    echo '                   class="ml-2 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">';
+    echo '                    <i class="fas fa-file-pdf mr-2"></i> Générer PDF';
+    echo '                </a>';
+}
+
+echo '            </div>';
+echo '        </div>';
+echo '    </form>';
+echo '</div>';
+
+// Afficher les bulletins si une classe et une période sont sélectionnées
+if ($classe_id > 0 && $periode_id > 0) { 
+    // Afficher une alerte s'il y a une erreur
+    if (!empty($error)) { 
+        echo '<div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">';
+        echo '    <div class="flex">';
+        echo '        <div class="flex-shrink-0">';
+        echo '            <i class="fas fa-exclamation-triangle h-5 w-5 text-yellow-400"></i>';
+        echo '        </div>';
+        echo '        <div class="ml-3">';
+        echo '            <p class="text-sm text-yellow-700">';
+        echo '                ' . htmlspecialchars($error);
+        echo '            </p>';
+        echo '        </div>';
+        echo '    </div>';
+        echo '</div>';
+    } else { // Pas d'erreur, afficher les bulletins
+        $classe = array_filter($classes, function($c) use ($classe_id) {
+            return $c['id'] == $classe_id;
+        });
+        $classe = reset($classe);
+        
+        $periode = array_filter($periodes, function($p) use ($periode_id) {
+            return $p['id'] == $periode_id;
+        });
+        $periode = reset($periode);
+        
+        echo '<div class="bg-white shadow overflow-hidden sm:rounded-lg mb-8">';
+        echo '    <div class="px-4 py-5 sm:px-6 bg-gray-50">';
+        echo '        <h3 class="text-lg font-medium leading-6 text-gray-900">';
+        echo '            Bulletins de notes - ';
+        echo '            ' . htmlspecialchars($classe['niveau'] . ' ' . $classe['nom'] . ' - ' . $periode['nom'] . ' ' . $periode['annee_scolaire']);
+        echo '        </h3>';
+        echo '        <p class="mt-1 max-w-2xl text-sm text-gray-500">';
+        echo '            Liste des élèves et de leurs moyennes pour la période sélectionnée.';
+        echo '        </p>';
+        echo '    </div>';
+        echo '    <div class="px-4 py-5 sm:p-0">';
+        echo '        <table class="min-w-full divide-y divide-gray-200">';
+        echo '            <thead class="bg-gray-50">';
+        echo '                <tr>';
+        echo '                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">';
+        echo '                        Élève';
+        echo '                    </th>';
+        echo '                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">';
+        echo '                        Moyenne';
+        echo '                    </th>';
+        echo '                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">';
+        echo '                        Actions';
+        echo '                    </th>';
+        echo '                </tr>';
+        echo '            </thead>';
+        echo '            <tbody class="bg-white divide-y divide-gray-200">';
+        
+        // Vérifier si $eleves est défini et n'est pas vide
+        if (!empty($eleves)) { 
+            foreach ($eleves as $eleve) { 
+                $has_notes = false;
+                $moyenne_eleve = 0;
+                $total_coeff = 0;
                 
-                <?php if ($classe_id > 0 && $periode_id > 0 && !empty($eleves)): ?>
-                    <a href="generer_bulletin_pdf.php?classe_id=<?php echo $classe_id; ?>&periode_id=<?php echo $periode_id; ?>" 
-                       target="_blank"
-                       class="ml-2 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
-                        <i class="fas fa-file-pdf mr-2"></i> Générer PDF
-                    </a>
-                <?php endif; ?>
-            </div>
-        </div>
-    </form>
-</div>
-
-<?php if ($classe_id > 0 && $periode_id > 0): ?>
-    <?php if (!empty($error)): ?>
-        <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
-            <div class="flex">
-                <div class="flex-shrink-0">
-                    <i class="fas fa-exclamation-triangle h-5 w-5 text-yellow-400"></i>
-                </div>
-                <div class="ml-3">
-                    <p class="text-sm text-yellow-700">
-                        <?php echo $error; ?>
-                    </p>
-                </div>
-            </div>
-        </div>
-    <?php elseif (empty($eleves)): ?>
-        <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
-            <div class="flex">
-                <div class="flex-shrink-0">
-                    <i class="fas fa-exclamation-triangle h-5 w-5 text-yellow-400"></i>
-                </div>
-                <div class="ml-3">
-                    <p class="text-sm text-yellow-700">
-                        Aucun élève trouvé dans cette classe.
-                    </p>
-                </div>
-            </div>
-        </div>
-    <?php else: ?>
-        <div class="bg-white shadow overflow-hidden sm:rounded-lg mb-8">
-            <div class="px-4 py-5 sm:px-6 bg-gray-50">
-                <h3 class="text-lg font-medium leading-6 text-gray-900">
-                    Bulletins de notes - 
-                    <?php 
-                    $classe = array_filter($classes, function($c) use ($classe_id) {
-                        return $c['id'] == $classe_id;
-                    });
-                    $classe = reset($classe);
-                    $periode = array_filter($periodes, function($p) use ($periode_id) {
-                        return $p['id'] == $periode_id;
-                    });
-                    $periode = reset($periode);
-                    echo htmlspecialchars($classe['nom'] . ' ' . $classe['niveau'] . ' - ' . $periode['nom']);
-                    ?>
-                </h3>
-            </div>
-            
-            <div class="px-4 py-5 sm:p-0">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-50">
-                    <tr>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Élève
-                        </th>
-                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Moyenne
-                        </th>
-                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Actions
-                        </th>
-                    </tr>
-                    </thead>
-                    <tbody class="bg-white divide-y divide-gray-200">
-                    <?php foreach ($eleves as $eleve): ?>
-                        <?php 
-                        $has_notes = false;
-                        $moyenne_eleve = 0;
-                        $total_coeff = 0;
-                        
-                        if (isset($bulletins[$eleve['id']])) {
-                            foreach ($bulletins[$eleve['id']]['matieres'] as $matiere_id => $matiere_data) {
-                                if ($matiere_data['moyenne'] !== null) {
-                                    $has_notes = true;
-                                    $moyenne_eleve += (float)str_replace(',', '.', $matiere_data['moyenne']) * $matiere_data['coefficient'];
-                                    $total_coeff += $matiere_data['coefficient'];
-                                }
-                            }
+                if (isset($bulletins[$eleve['id']])) {
+                    foreach ($bulletins[$eleve['id']]['matieres'] as $matiere_id => $matiere_data) {
+                        if ($matiere_data['moyenne'] !== null) {
+                            $has_notes = true;
+                            $moyenne_eleve += (float)str_replace(',', '.', $matiere_data['moyenne']) * $matiere_data['coefficient'];
+                            $total_coeff += $matiere_data['coefficient'];
                         }
-                        
-                        if ($has_notes && $total_coeff > 0) {
-                            $moyenne_generale = $moyenne_eleve / $total_coeff;
-                            $couleur = $moyenne_generale >= 10 ? 'text-green-600' : 'text-red-600';
-                        } else {
-                            $couleur = 'text-gray-400';
-                        }
-                        ?>
-                        <tr>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                <?php echo htmlspecialchars($eleve['nom'] . ' ' . $eleve['prenom']); ?>
-                            </td>
-                            
-                            <?php endforeach; ?>
-                            
-                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-gray-900">
-                                <?php 
-                                if ($has_notes && $total_coeff > 0) {
-                                    $moyenne_generale = $moyenne_eleve / $total_coeff;
-                                    $couleur = $moyenne_generale >= 10 ? 'text-green-600' : 'text-red-600';
-                                    echo '<span class="font-semibold ' . $couleur . '">' . number_format($moyenne_generale, 2, ',', ' ') . ' / 20</span>';
-                                } else {
-                                    echo '<span class="text-gray-400">-</span>';
-                                }
-                                ?>
-                            </td>
-                            
-                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                                <?php if ($has_notes): ?>
-                                    <a href="voir_bulletin.php?eleve_id=<?php echo $eleve['id']; ?>&classe_id=<?php echo $classe_id; ?>&periode_id=<?php echo $periode_id; ?>" 
-                                       class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                                       title="Voir le bulletin">
-                                        <i class="fas fa-eye mr-1"></i> Voir
-                                    </a>
-                                    <a href="generer_bulletin_pdf.php?eleve_id=<?php echo $eleve['id']; ?>&classe_id=<?php echo $classe_id; ?>&periode_id=<?php echo $periode_id; ?>" 
-                                       class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                                       title="Télécharger le PDF"
-                                       target="_blank">
-                                        <i class="fas fa-file-pdf mr-1"></i> PDF
-                                    </a>
-                                <?php else: ?>
-                                    <span class="text-gray-400 text-sm">-</span>
-                                <?php endif; ?>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    <?php endif; ?>
-<?php else: ?>
-    <div class="bg-white p-6 rounded-lg shadow">
-        <div class="text-center">
-            <i class="fas fa-clipboard-list text-4xl text-gray-400 mb-4"></i>
-            <h3 class="text-lg font-medium text-gray-900 mb-2">Aucune sélection</h3>
-            <p class="text-gray-500">Veuillez sélectionner une classe et une période pour afficher les bulletins de notes.</p>
-        </div>
-    </div>
-<?php endif; ?>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Mettre à jour l'URL avec les paramètres de filtre
-    const form = document.querySelector('form');
-    const classeSelect = document.getElementById('classe_id');
-    const periodeSelect = document.getElementById('periode_id');
-    
-    [classeSelect, periodeSelect].forEach(select => {
-        select.addEventListener('change', function() {
-            // Si les deux champs sont remplis, soumettre le formulaire
-            if (classeSelect.value && periodeSelect.value) {
-                form.submit();
+                    }
+                }
+                
+                if ($has_notes && $total_coeff > 0) {
+                    $moyenne_generale = $moyenne_eleve / $total_coeff;
+                    $couleur = $moyenne_generale >= 10 ? 'text-green-600' : 'text-red-600';
+                } else {
+                    $couleur = 'text-gray-400';
+                }
+                
+                echo '                <tr>';
+                echo '                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">';
+                echo '                        ' . htmlspecialchars($eleve['nom'] . ' ' . $eleve['prenom']);
+                echo '                    </td>';
+                echo '                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-gray-900">';
+                
+                if ($has_notes && $total_coeff > 0) {
+                    $moyenne_generale = $moyenne_eleve / $total_coeff;
+                    $couleur = $moyenne_generale >= 10 ? 'text-green-600' : 'text-red-600';
+                    echo '                        <span class="font-semibold ' . $couleur . '">' . number_format($moyenne_generale, 2, ',', ' ') . ' / 20</span>';
+                } else {
+                    echo '                        <span class="text-gray-400">-</span>';
+                }
+                
+                echo '                    </td>';
+                echo '                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">';
+                
+                if ($has_notes) {
+                    echo '                        <a href="voir_bulletin.php?eleve_id=' . $eleve['id'] . '&classe_id=' . $classe_id . '&periode_id=' . $periode_id . '" ';
+                    echo '                           class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"';
+                    echo '                           title="Voir le bulletin">';
+                    echo '                            <i class="fas fa-eye mr-1"></i> Voir';
+                    echo '                        </a>';
+                    echo '                        <a href="generer_bulletin_pdf.php?eleve_id=' . $eleve['id'] . '&classe_id=' . $classe_id . '&periode_id=' . $periode_id . '" ';
+                    echo '                           class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"';
+                    echo '                           title="Télécharger le PDF"';
+                    echo '                           target="_blank">';
+                    echo '                            <i class="fas fa-file-pdf mr-1"></i> PDF';
+                    echo '                        </a>';
+                } else {
+                    echo '                        <span class="text-gray-400 text-sm">-</span>';
+                }
+                
+                echo '                    </td>';
+                echo '                </tr>';
             }
-        });
-    });
-    
-    // Gestion de l'impression
-    const printBtn = document.getElementById('printBtn');
-    if (printBtn) {
-        printBtn.addEventListener('click', function() {
-            window.print();
-        });
+        } else { // Aucun élève trouvé
+            echo '                <tr>';
+            echo '                    <td colspan="3" class="px-6 py-4 text-center text-sm text-gray-500">';
+            echo '                        Aucun élève trouvé dans cette classe.';
+            echo '                    </td>';
+            echo '                </tr>';
+        }
+        
+        echo '            </tbody>';
+        echo '        </table>';
+        echo '    </div>';
+        echo '</div>';
     }
-});
-</script>
+} else { // Aucune sélection de classe ou période 
+    echo '<div class="bg-white p-6 rounded-lg shadow">';
+    echo '    <div class="text-center">';
+    echo '        <i class="fas fa-clipboard-list text-4xl text-gray-400 mb-4"></i>';
+    echo '        <h3 class="text-lg font-medium text-gray-900 mb-2">Aucune sélection</h3>';
+    echo '        <p class="text-gray-500">Veuillez sélectionner une classe et une période pour afficher les bulletins de notes.</p>';
+    echo '    </div>';
+    echo '</div>';
+}
 
-<?php include 'includes/footer.php'; ?>
+echo '<script>';
+echo 'document.addEventListener("DOMContentLoaded", function() {';
+echo '    // Mettre à jour l\'URL avec les paramètres de filtre';
+echo '    const form = document.querySelector("form");';
+echo '    const classeSelect = document.getElementById("classe_id");';
+echo '    const periodeSelect = document.getElementById("periode_id");';
+echo '    ';
+echo '    [classeSelect, periodeSelect].forEach(select => {';
+echo '        select.addEventListener("change", function() {';
+echo '            // Si les deux champs sont remplis, soumettre le formulaire';
+echo '            if (classeSelect.value && periodeSelect.value) {';
+echo '                form.submit();';
+echo '            }';
+echo '        });';
+echo '    });';
+echo '    ';
+echo '    // Gestion de l\'impression';
+echo '    const printBtn = document.getElementById("printBtn");';
+echo '    if (printBtn) {';
+echo '        printBtn.addEventListener("click", function() {';
+echo '            window.print();';
+echo '        });';
+echo '    }';
+echo '});';
+echo '</script>';
+
+include 'includes/footer.php';

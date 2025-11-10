@@ -64,6 +64,7 @@ try {
     }
 
     // Récupérer les notes de l'élève pour la période
+    // Récupérer d'abord les notes avec les informations de base
     $query = "
         SELECT 
             n.*, 
@@ -73,14 +74,9 @@ try {
             NULLIF((CASE WHEN n.interro1 IS NOT NULL THEN 1 ELSE 0 END + 
                    CASE WHEN n.interro2 IS NOT NULL THEN 1 ELSE 0 END + 
                    CASE WHEN n.devoir IS NOT NULL THEN 1 ELSE 0 END + 
-                   CASE WHEN n.compo IS NOT NULL THEN 2 ELSE 0 END), 0) as moyenne,
-            a.contenu as appreciation
+                   CASE WHEN n.compo IS NOT NULL THEN 2 ELSE 0 END), 0) as moyenne
         FROM notes n
         JOIN matieres m ON n.matiere_id = m.id
-        LEFT JOIN appreciations a ON a.eleve_id = n.eleve_id 
-            AND a.matiere_id = n.matiere_id 
-            AND a.classe_id = n.classe_id 
-            AND a.semestre = n.semestre
         WHERE n.eleve_id = ? 
         AND n.classe_id = ?
         AND n.semestre = ?
@@ -90,6 +86,61 @@ try {
     $stmt = $db->prepare($query);
     $stmt->execute([$eleve_id, $classe_id, $semestre]);
     $notes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Log pour déboguer les matières dans les notes
+    error_log("Matières dans les notes : " . print_r(array_column($notes, 'matiere_id'), true));
+    
+    // Récupérer les professeurs pour chaque matière
+    try {
+        // Vérifier la structure de la table enseignements
+        $structure = $db->query("SHOW COLUMNS FROM enseignements")->fetchAll(PDO::FETCH_COLUMN);
+        error_log("Structure de la table enseignements: " . print_r($structure, true));
+        
+        // Vérifier les données dans la table enseignements
+        $test_query = $db->query("SELECT * FROM enseignements LIMIT 5");
+        $test_data = $test_query->fetchAll(PDO::FETCH_ASSOC);
+        error_log("Données d'exemple de la table enseignements: " . print_r($test_data, true));
+        
+        // Récupérer tous les enseignements avec les noms des professeurs
+        $query_profs = "
+            SELECT e.id, e.matiere_id, e.professeur_id, CONCAT(u.prenom, ' ', u.nom) as professeur_nom
+            FROM enseignements e
+            JOIN utilisateurs u ON e.professeur_id = u.id
+        ";
+        
+        $professeurs = [];
+        $stmt = $db->query($query_profs);
+        $all_profs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        error_log("Tous les enseignements avec professeurs: " . print_r($all_profs, true));
+        
+        // Créer un tableau associatif matiere_id => professeur_nom
+        foreach ($all_profs as $row) {
+            $professeurs[$row['matiere_id']] = $row['professeur_nom'];
+        }
+        
+        error_log("Professeurs récupérés : " . print_r($professeurs, true));
+        
+        // Associer chaque professeur à sa matière dans les notes
+        foreach ($notes as &$note) {
+            $matiere_id = $note['matiere_id'];
+            $note['professeur_nom'] = $professeurs[$matiere_id] ?? 'Non attribué';
+            error_log(sprintf("Matière ID: %d, Nom: %s, Professeur: %s", 
+                $matiere_id, 
+                $note['matiere_nom'] ?? 'Inconnu', 
+                $note['professeur_nom']));
+        }
+        unset($note);
+        
+    } catch (Exception $e) {
+        error_log("Erreur lors de la récupération des professeurs: " . $e->getMessage());
+        error_log("Notes avant l'erreur : " . print_r($notes, true));
+        error_log("Professeurs avant l'erreur : " . print_r($professeurs, true));
+        // En cas d'erreur, on garde 'Non attribué' comme valeur par défaut
+        foreach ($notes as &$note) {
+            $note['professeur_nom'] = 'Non attribué';
+        }
+        unset($note);
+    }
 
     // Préparer les données pour le template
     $bulletins = [];
@@ -100,47 +151,69 @@ try {
     foreach ($notes as $note) {
         $moyenne = $note['moyenne'] ?? 0;
         
-        $bulletins[$note['matiere_id']] = [
+        if ($moyenne > 0) {
+            $has_notes = true;
+            $moyenne_ponderee = $moyenne * $note['coefficient'];
+            $moyenne_generale += $moyenne_ponderee;
+            $total_coeff += $note['coefficient'];
+        }
+        
+        // Générer l'appréciation pour cette matière
+        $appreciation = '';
+        if ($moyenne >= 16) {
+            $appreciation = 'Très Bien';
+        } elseif ($moyenne >= 14) {
+            $appreciation = 'Bien';
+        } elseif ($moyenne >= 12) {
+            $appreciation = 'Assez Bien';
+        } elseif ($moyenne >= 10) {
+            $appreciation = 'Passable';
+        } elseif ($moyenne > 0) {
+            $appreciation = 'Insuffisant';
+        }
+        
+        $bulletins[] = [
+            'matiere_id' => $note['matiere_id'],
             'matiere_nom' => $note['matiere_nom'],
             'coefficient' => $note['coefficient'],
-            'interro1' => $note['interro1'] ?? '-',
-            'interro2' => $note['interro2'] ?? '-',
-            'devoir' => $note['devoir'] ?? '-',
-            'compo' => $note['compo'] ?? '-',
-            'moyenne' => $moyenne > 0 ? number_format($moyenne, 2, ',', ' ') : '-',
-            'appreciation' => $note['appreciation'] ?? ''
+            'interro1' => $note['interro1'] ?? null,
+            'interro2' => $note['interro2'] ?? null,
+            'devoir' => $note['devoir'] ?? null,
+            'compo' => $note['compo'] ?? null,
+            'moyenne' => $moyenne,
+            'professeur' => $note['professeur_nom'] ?? 'Non attribué',
+            'appreciation' => $appreciation
         ];
-
-        if ($moyenne > 0) {
-            $moyenne_generale += $moyenne * $note['coefficient'];
-            $total_coeff += $note['coefficient'];
-            $has_notes = true;
-        }
     }
 
     // Calculer la moyenne générale
     $moyenne_generale = $has_notes && $total_coeff > 0 ? $moyenne_generale / $total_coeff : 0;
 
-    // Récupérer l'appréciation générale
-    $appreciation = '';
-    $stmt = $db->prepare("
-        SELECT contenu 
-        FROM appreciations 
-        WHERE eleve_id = ? 
-        AND classe_id = ? 
-        AND matiere_id IS NULL 
-        AND semestre = ?
-    ");
-    $stmt->execute([$eleve_id, $classe_id, $semestre]);
-    $appreciation_data = $stmt->fetch(PDO::FETCH_ASSOC);
-    $appreciation = $appreciation_data ? $appreciation_data['contenu'] : '';
+    // Fonction pour générer une appréciation basée sur la moyenne
+    function getAppreciation($moyenne) {
+        if ($moyenne >= 16) return 'Très Bien';
+        if ($moyenne >= 14) return 'Bien';
+        if ($moyenne >= 12) return 'Assez Bien';
+        if ($moyenne >= 10) return 'Passable';
+        if ($moyenne > 0) return 'Insuffisant';
+        return '';
+    }
+    
+    // Ajouter l'appréciation à chaque matière
+    foreach ($notes as &$note) {
+        $note['appreciation'] = $note['moyenne'] ? getAppreciation($note['moyenne']) : '';
+    }
+    unset($note);
+    
+    // Appréciation générale
+    $appreciation_generale = $moyenne_generale ? getAppreciation($moyenne_generale) : '';
 
     // Récupérer l'effectif de la classe pour le rang
     $stmt = $db->prepare("SELECT COUNT(*) as effectif FROM eleves WHERE classe_id = ?");
     $stmt->execute([$classe_id]);
     $effectif = $stmt->fetch(PDO::FETCH_ASSOC)['effectif'];
 
-    // Calculer le rang (simplifié)
+    // Calculer le rang avec formatage
     $rang = 'N/A';
     if ($has_notes) {
         $stmt = $db->prepare("
@@ -166,19 +239,34 @@ try {
         ");
         $stmt->execute([$classe_id, $semestre, $moyenne_generale]);
         $rang_data = $stmt->fetch(PDO::FETCH_ASSOC);
-        $rang = $rang_data ? $rang_data['rang'] : 1;
+        $rang = $rang_data ? $rang_data['rang'] . ($rang_data['rang'] == 1 ? 'er' : 'e') : 1;
     }
 
     // Inclure le header après avoir traité toutes les données
     include __DIR__ . '/includes/header.php';
 
-    // Inclure le template
+    // Ajouter les informations de l'école
+    $ecole = [
+        'nom' => 'Groupe Scolaire ISSET',
+        'ville' => 'Tsévié',
+        'pays' => 'TOGO',
+        'adresse' => 'BP 200 Tsévié',
+        'contact' => '22 50 00 00',
+        'email' => 'contact@isset.tg'
+    ];
+    
+    // Inclure le template du bulletin
     include __DIR__ . '/templates/bulletin_template.php';
 
 } catch (Exception $e) {
-    // En cas d'erreur, rediriger avec un message d'erreur
-    $_SESSION['error'] = "Erreur : " . $e->getMessage();
-    header('Location: bulletins.php');
+    // En cas d'erreur, afficher le message d'erreur directement
+    $error_message = "Erreur : " . $e->getMessage();
+    include __DIR__ . '/includes/header.php';
+    echo '<div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4" role="alert">';
+    echo '    <p class="font-bold">Erreur</p>';
+    echo '    <p>' . htmlspecialchars($error_message) . '</p>';
+    echo '</div>';
+    include __DIR__ . '/includes/footer.php';
     exit();
 }
 

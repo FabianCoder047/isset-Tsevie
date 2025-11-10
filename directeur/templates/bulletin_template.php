@@ -35,17 +35,23 @@
 <body class="bg-gray-100 p-4 md:p-8">
     <div class="max-w-4xl mx-auto bg-white rounded-lg shadow-lg overflow-hidden">
         <!-- En-tête -->
-        <div class="bg-blue-800 text-white p-6 text-center">
-            <div class="flex justify-between items-center mb-4">
-                <div class="w-1/4 text-left">
-                    <img src="/images/logo.jpeg" alt="Logo" class="h-20 mx-auto">
+        <div class="bg-blue-800 text-white p-6">
+            <div class="flex justify-between items-start mb-4">
+                <div class="w-1/4 text-center">
+                    <img src="../images/logo.jpeg" alt="Logo" class="h-20 mx-auto">
+                    <p class="text-xs mt-2"><?php echo htmlspecialchars($ecole['nom']); ?></p>
                 </div>
-                <div class="w-2/4">
-                    <h1 class="text-2xl font-bold">BULLETIN DE NOTES</h1>
-                    <p class="text-lg"><?php echo htmlspecialchars($classe['niveau'] . ' ' . $classe['nom']); ?></p>
-                    <p class="text-lg"><?php echo htmlspecialchars($periode['nom']); ?> - Année Scolaire <?php echo htmlspecialchars($periode['annee_scolaire']); ?></p>
+                <div class="w-2/4 text-center">
+                    <h1 class="text-2xl font-bold">REPUBLIQUE TOGOLAISE</h1>
+                    <p class="text-lg">Ministère de l'Éducation et de la Recherche Supérieure</p>
+                    <h2 class="text-xl font-bold mt-2">BULLETIN DE NOTES</h2>
+                    <p class="text-sm"><?php echo htmlspecialchars($classe['nom'] . ' ' . $classe['niveau']); ?></p>
+                    <p class="text-sm"><?php echo htmlspecialchars($periode['nom']); ?> - Année Scolaire <?php echo htmlspecialchars($periode['annee_scolaire']); ?></p>
                 </div>
-                <div class="w-1/4"></div>
+                <div class="w-1/4 text-center">
+                    <img src="../images/sceau.png" alt="Sceau de l'Etat" class="h-20 mx-auto">
+                    <p class="text-xs mt-2"><?php echo htmlspecialchars($ecole['ville'] . ' - ' . $ecole['pays']); ?></p>
+                </div>
             </div>
         </div>
 
@@ -57,7 +63,7 @@
                     <p><span class="font-semibold">Date de naissance :</span> <?php echo !empty($eleve['date_naissance']) ? date('d/m/Y', strtotime($eleve['date_naissance'])) : '-'; ?></p>
                 </div>
                 <div>
-                    <p><span class="font-semibold">Classe :</span> <?php echo htmlspecialchars($classe['niveau'] . ' ' . $classe['nom']); ?></p>
+                    <p><span class="font-medium">Lieu de naissance :</span> <?php echo htmlspecialchars($eleve['lieu_naissance'] ?? 'Non défini'); ?></p>
                     <p><span class="font-semibold">Effectif de la classe :</span> <?php echo isset($effectif) ? $effectif : '-'; ?></p>
                 </div>
             </div>
@@ -76,6 +82,7 @@
                         <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Compo</th>
                         <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Moyenne</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Appréciation</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Professeur</th>
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
@@ -100,10 +107,17 @@
                                 <?php echo $note['compo'] ?? '-'; ?>
                             </td>
                             <td class="px-2 py-4 whitespace-nowrap text-sm text-center font-semibold <?php echo ($note['moyenne'] ?? 0) >= 10 ? 'text-green-600' : 'text-red-600'; ?>">
-                                <?php echo $note['moyenne'] ?? '-'; ?>
+                                <?php echo isset($note['moyenne']) ? number_format((float)$note['moyenne'], 2, ',', ' ') : '-'; ?>
                             </td>
                             <td class="px-6 py-4 text-sm text-gray-500">
-                                <?php echo $note['appreciation'] ?? '-'; ?>
+                                <?php if (!empty($note['appreciation'])): ?>
+                                <div class="text-sm italic">
+                                    <?php echo htmlspecialchars($note['appreciation']); ?>
+                                </div>
+                                <?php endif; ?>
+                            </td>
+                            <td class="px-6 py-4 text-sm text-gray-500">
+                                <?php echo htmlspecialchars($note['professeur'] ?? 'Non attribué'); ?>
                             </td>
                         </tr>
                     <?php endforeach; ?>
@@ -116,18 +130,26 @@
             <div class="grid grid-cols-2 gap-4">
                 <div>
                     <h3 class="text-lg font-semibold mb-2">Résultats</h3>
-                    <p><span class="font-semibold">Moyenne générale :</span> 
-                        <span class="font-bold <?php echo $moyenne_generale >= 10 ? 'text-green-600' : 'text-red-600'; ?>">
-                            <?php echo number_format($moyenne_generale, 2, ',', ' '); ?> / 20
-                        </span>
+                    <p><span class="font-medium">Moyenne Générale :</span> <?php echo number_format((float)$moyenne_generale, 2, ',', ' '); ?>/20 
+                        <?php if (!empty($appreciation_generale)): ?>
+                            <span class="italic">(<?php echo htmlspecialchars($appreciation_generale); ?>)</span>
+                        <?php endif; ?>
                     </p>
-                    <p><span class="font-semibold">Rang :</span> 
-                        <?php echo isset($rang) ? $rang . ' / ' . $effectif : '-'; ?>
+                    <p><span class="font-medium">Rang :</span> 
+                        <?php if (isset($rang) && $rang !== 'N/A'): ?>
+                            <?php 
+                                $rang_num = (int)$rang;
+                                $suffixe = ($rang_num === 1) ? 'er' : 'e';
+                                echo $rang_num . '<sup>' . $suffixe . '</sup>';
+                            ?> sur <?php echo $effectif; ?> élève(s)
+                        <?php else: ?>
+                            -
+                        <?php endif; ?>
                     </p>
                 </div>
                 <div>
                     <h3 class="text-lg font-semibold mb-2">Appréciation générale</h3>
-                    <p class="italic"><?php echo nl2br(htmlspecialchars($appreciation ?? 'Aucune appréciation')); ?></p>
+                    <p class="italic"><?php echo nl2br(htmlspecialchars($appreciation_generale ?? 'Aucune appréciation')); ?></p>
                 </div>
             </div>
         </div>
@@ -142,8 +164,8 @@
                     </div>
                 </div>
                 <div class="text-right">
-                    <p>Fait à [Ville], le <?php echo date('d/m/Y'); ?></p>
-                    <p>Le Professeur Principal</p>
+                    <p>Fait à Tsévié, le <?php echo date('d/m/Y'); ?></p>
+                    <p>Titulaire de classe</p>
                     <div class="mt-8">
                         <p class="border-t border-black w-32 ml-auto mt-2"></p>
                     </div>
@@ -154,9 +176,9 @@
 
     <!-- Boutons d'action -->
     <div class="mt-6 flex justify-center space-x-4 no-print">
-        <button onclick="window.print()" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-            <i class="fas fa-print mr-2"></i> Imprimer
-        </button>
+        <a href="generer_pdf.php?eleve_id=<?php echo $eleve_id; ?>&classe_id=<?php echo $classe_id; ?>&periode_id=<?php echo $periode_id; ?>" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+            <i class="fas fa-file-pdf mr-2"></i> Télécharger le PDF
+        </a>
         <a href="bulletins.php?classe_id=<?php echo $classe_id; ?>" class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
             <i class="fas fa-arrow-left mr-2"></i> Retour
         </a>
