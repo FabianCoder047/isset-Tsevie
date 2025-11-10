@@ -1,0 +1,2 @@
+# Désactiver l'accès direct au dossier logs
+Deny from all

@@ -1,0 +1,77 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    
+    # Désactiver l'ajout automatique du répertoire de base
+    RewriteBase /isset/
+    
+    # Rediriger www vers non-www (optionnel)
+    RewriteCond %{HTTP_HOST} ^www\.(.*)$ [NC]
+    RewriteRule ^(.*)$ http://%1/isset/$1 [R=301,L]
+    
+    # Rediriger vers HTTPS (optionnel mais recommandé en production)
+    # RewriteCond %{HTTPS} off
+    # RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+    
+    # Règles pour les répertoires spécifiques - Désactivées car elles causent des problèmes
+    # RewriteRule ^directeur/(.*)$ directeur/$1 [L]
+    # RewriteRule ^professeur/(.*)$ professeur/$1 [L]
+    # RewriteRule ^secretaire/(.*)$ secretaire/$1 [L]
+    
+    # Règle pour la racine du site
+    RewriteCond %{REQUEST_URI} ^/isset/$
+    RewriteRule ^$ /isset/login.php [L]
+    
+    # Si le fichier ou le répertoire n'existe pas, on redirige vers index.php
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^(.*)$ index.php?url=$1 [L,QSA]
+    
+    # Empêcher l'accès direct aux répertoires sensibles
+    RewriteRule ^(config|includes|logs) - [F,L,NC]
+</IfModule>
+
+# Désactiver l'affichage du contenu des répertoires
+Options -Indexes
+
+# Protéger les fichiers sensibles
+<FilesMatch "^\.|composer\.(json|lock)|package(-lock)?\.json|webpack\.config\.js|gulpfile\.js|yarn\.lock$">
+    Require all denied
+</FilesMatch>
+
+# Protéger les fichiers de configuration
+<FilesMatch "\.(env|json|config|local|inc|sh|sql|log|tpl|twig|md|gitignore|gitattributes|lock)$">
+    Require all denied
+</FilesMatch>
+
+# Autoriser l'accès aux fichiers nécessaires
+<FilesMatch "\.(css|js|jpg|jpeg|png|gif|ico|svg|woff|woff2|ttf|eot)$">
+    Require all granted
+</FilesMatch>
+
+# Activer la compression GZIP
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/plain
+    AddOutputFilterByType DEFLATE text/html
+    AddOutputFilterByType DEFLATE text/xml
+    AddOutputFilterByType DEFLATE text/css
+    AddOutputFilterByType DEFLATE application/xml
+    AddOutputFilterByType DEFLATE application/xhtml+xml
+    AddOutputFilterByType DEFLATE application/rss+xml
+    AddOutputFilterByType DEFLATE application/javascript
+    AddOutputFilterByType DEFLATE application/x-javascript
+</IfModule>
+
+# Mise en cache des ressources statiques
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType image/jpg "access plus 1 year"
+    ExpiresByType image/jpeg "access plus 1 year"
+    ExpiresByType image/gif "access plus 1 year"
+    ExpiresByType image/png "access plus 1 year"
+    ExpiresByType text/css "access plus 1 month"
+    ExpiresByType application/pdf "access plus 1 month"
+    ExpiresByType text/x-javascript "access plus 1 month"
+    ExpiresByType application/x-shockwave-flash "access plus 1 month"
+    ExpiresByType image/x-icon "access plus 1 year"
+    ExpiresDefault "access plus 2 days"
+</IfModule>
