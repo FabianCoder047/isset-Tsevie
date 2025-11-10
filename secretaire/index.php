@@ -91,331 +91,182 @@ try {
 }
 ?>
 
-<!-- Onglets de navigation -->
-<div class="border-b border-gray-200 mb-6">
-    <nav class="-mb-px flex space-x-8" aria-label="Tabs">
-        <a href="#inscription" 
-           class="tab-link border-blue-500 text-blue-600 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" 
-           data-tab="inscription">
-            Inscription
-        </a>
-        <a href="#statistiques" 
-           class="tab-link border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" 
-           data-tab="statistiques">
-            Statistiques
-        </a>
-    </nav>
+<!-- En-tête de la page -->
+<div class="bg-white shadow">
+    <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        <h1 class="text-3xl font-bold text-gray-900">Tableau de bord</h1>
+        <p class="mt-1 text-sm text-gray-500">Bienvenue dans l'espace secrétaire de l'ISSET Tsévié</p>
+    </div>
 </div>
 
-<!-- Contenu des onglets -->
-<div class="space-y-6">
-    <!-- Onglet Inscription -->
-    <div id="inscription-tab" class="tab-content">
-        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
-            <h2 class="text-xl font-semibold text-gray-700 mb-4">Nouvelle inscription</h2>
-            
-            <!-- Formulaire d'inscription -->
-            <form id="inscriptionForm" class="space-y-4">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label for="nom" class="block text-sm font-medium text-gray-700">Nom</label>
-                        <input type="text" id="nom" name="nom" required 
-                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                    </div>
-                    <div>
-                        <label for="prenom" class="block text-sm font-medium text-gray-700">Prénom(s)</label>
-                        <input type="text" id="prenom" name="prenom" required
-                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                    </div>
+<!-- Contenu principal -->
+<div class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+    <!-- Cartes de statistiques -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div class="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+            <div class="flex items-center">
+                <div class="p-3 rounded-full bg-blue-100 text-blue-600 mr-4">
+                    <i class="fas fa-users text-xl"></i>
                 </div>
-                
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                        <label for="date_naissance" class="block text-sm font-medium text-gray-700">Date de naissance</label>
-                        <input type="date" id="date_naissance" name="date_naissance" required
-                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                    </div>
-                    <div>
-                        <label for="lieu_naissance" class="block text-sm font-medium text-gray-700">Lieu de naissance</label>
-                        <input type="text" id="lieu_naissance" name="lieu_naissance" required
-                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                    </div>
-                    <div>
-                        <label for="sexe" class="block text-sm font-medium text-gray-700">Sexe</label>
-                        <select id="sexe" name="sexe" required
-                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                            <option value="">Sélectionner...</option>
-                            <option value="M">Masculin</option>
-                            <option value="F">Féminin</option>
-                        </select>
-                    </div>
-                </div>
-                
-            
-                
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                        <label for="classe_id" class="block text-sm font-medium text-gray-700">Classe</label>
-                        <select id="classe_id" name="classe_id" required
-                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                            <option value="">Sélectionner une classe...</option>
-                            <?php
-                            try {
-                                $stmt = $db->query("SELECT id, nom, niveau FROM classes ORDER BY niveau, nom");
-                                while ($classe = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                                    echo "<option value='" . $classe['id'] . "'>" . htmlspecialchars($classe['niveau'] . ' ' . $classe['nom']) . "</option>";
-                                }
-                            } catch (PDOException $e) {
-                                echo "<option value=''>Erreur de chargement des classes</option>";
-                            }
-                            ?>
-                        </select>
-                    </div>
-                    <div>
-                        <label for="annee_scolaire" class="block text-sm font-medium text-gray-700">Année scolaire</label>
-                        <select id="annee_scolaire" name="annee_scolaire" required
-                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                            <?php
-                            $current_year = date('Y');
-                            for ($i = -2; $i <= 2; $i++) {
-                                $year = $current_year + $i;
-                                $next_year = $year + 1;
-                                $annee_scolaire = "$year-$next_year";
-                                $selected = ($i === 0) ? 'selected' : '';
-                                echo "<option value='$annee_scolaire' $selected>$annee_scolaire</option>";
-                            }
-                            ?>
-                        </select>
-                    </div>
-                    <div class="flex items-end">
-                        <button type="submit"
-                                class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                            Enregistrer l'inscription
-                        </button>
-                    </div>
-                </div>
-            </form>
-        </div>
-
-        <!-- Liste des élèves -->
-        <div class="bg-white rounded-lg shadow-md p-6">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-semibold text-gray-700">Liste des élèves</h2>
-                <div class="flex space-x-2">
-                    <input type="text" id="searchInput" placeholder="Rechercher un élève..." 
-                           class="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                    <button id="exportBtn" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
-                        <i class="fas fa-file-export mr-2"></i>Exporter
-                    </button>
+                <div>
+                    <p class="text-sm font-medium text-gray-500">Total des élèves</p>
+                    <p class="text-2xl font-semibold text-gray-900"><?php echo $stats['total_eleves']; ?></p>
                 </div>
             </div>
-            
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-50">
-                        <tr>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Matricule</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom et prénoms</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Classe</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
-                            <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody class="bg-white divide-y divide-gray-200">
-                        <?php foreach ($eleves as $eleve): ?>
-                        <tr class="hover:bg-gray-50">
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                <?php echo htmlspecialchars($eleve['matricule'] ?? 'N/A'); ?>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm font-medium text-gray-900"><?php echo htmlspecialchars($eleve['nom'] . ' ' . $eleve['prenom']); ?></div>
-                                <div class="text-sm text-gray-500"><?php echo $eleve['sexe'] === 'M' ? 'Garçon' : 'Fille'; ?></div>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                <?php 
-                                $classe = '';
-                                if (!empty($eleve['niveau']) && !empty($eleve['classe_nom'])) {
-                                    $classe = $eleve['niveau'] . ' ' . $eleve['classe_nom'];
-                                } else {
-                                    $classe = 'Non affecté';
-                                }
-                                echo htmlspecialchars($classe);
-                                ?>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                <?php echo !empty($eleve['contact']) ? htmlspecialchars($eleve['contact']) : 'Non renseigné'; ?>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                <div class="flex justify-end space-x-2">
-                                    <a href="#" class="text-blue-600 hover:text-blue-900 mr-3">
-                                        <i class="fas fa-edit"></i>
-                                    </a>
-                                    <a href="#" class="text-red-600 hover:text-red-900">
-                                        <i class="fas fa-trash-alt"></i>
-                                    </a>
-                                </div>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
-                        <?php if (empty($eleves)): ?>
-                        <tr>
-                            <td colspan="5" class="px-6 py-4 text-center text-sm text-gray-500">
-                                Aucun élève enregistré pour le moment.
-                            </td>
-                        </tr>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
+        </div>
+        
+        <div class="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+            <div class="flex items-center">
+                <div class="p-3 rounded-full bg-green-100 text-green-600 mr-4">
+                    <i class="fas fa-female text-xl"></i>
+                </div>
+                <div>
+                    <p class="text-sm font-medium text-gray-500">Filles</p>
+                    <p class="text-2xl font-semibold text-gray-900"><?php echo $stats['total_filles']; ?></p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+            <div class="flex items-center">
+                <div class="p-3 rounded-full bg-yellow-100 text-yellow-600 mr-4">
+                    <i class="fas fa-male text-xl"></i>
+                </div>
+                <div>
+                    <p class="text-sm font-medium text-gray-500">Garçons</p>
+                    <p class="text-2xl font-semibold text-gray-900"><?php echo $stats['total_garcons']; ?></p>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- Onglet Statistiques -->
-    <div id="statistiques-tab" class="tab-content hidden">
-        <div class="bg-white rounded-lg shadow-md p-6">
-            <h2 class="text-xl font-semibold text-gray-700 mb-4">Statistiques des inscriptions</h2>
-            
-            <!-- Cartes de statistiques -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div class="bg-blue-50 p-4 rounded-lg">
-                    <div class="text-sm font-medium text-blue-800">Total des élèves</div>
-                    <div class="mt-1 text-3xl font-semibold text-blue-600"><?php echo $stats['total_eleves']; ?></div>
-                </div>
-                <div class="bg-green-50 p-4 rounded-lg">
-                    <div class="text-sm font-medium text-green-800">Filles</div>
-                    <div class="mt-1 text-3xl font-semibold text-green-600"><?php echo $stats['total_filles']; ?></div>
-                </div>
-                <div class="bg-purple-50 p-4 rounded-lg">
-                    <div class="text-sm font-medium text-purple-800">Garçons</div>
-                    <div class="mt-1 text-3xl font-semibold text-purple-600"><?php echo $stats['total_garcons']; ?></div>
-                </div>
+    <!-- Dernières inscriptions -->
+    <div class="bg-white shadow overflow-hidden sm:rounded-lg mb-8">
+        <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+            <div class="flex justify-between items-center">
+                <h3 class="text-lg leading-6 font-medium text-gray-900">Dernières inscriptions</h3>
+                <a href="<?php echo $secretaire_url; ?>/inscription.php" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    <i class="fas fa-plus mr-2"></i> Nouvelle inscription
+                </a>
             </div>
-            
-            <!-- Tableau des effectifs par classe -->
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-50">
-                        <tr>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Classe</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Effectif total</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Filles</th>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Garçons</th>
-                        </tr>
-                    </thead>
-                    <tbody class="bg-white divide-y divide-gray-200">
+        </div>
+        <div class="bg-white overflow-hidden">
+            <?php if (!empty($eleves)): ?>
+                <ul class="divide-y divide-gray-200">
+                    <?php 
+                    // Afficher uniquement les 5 derniers élèves inscrits
+                    $derniers_eleves = array_slice($eleves, 0, 5);
+                    foreach ($derniers_eleves as $eleve): 
+                        $date_inscription = !empty($eleve['date_inscription']) ? new DateTime($eleve['date_inscription']) : null;
+                    ?>
+                        <li class="px-6 py-4 hover:bg-gray-50">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0 h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                                    <i class="fas fa-user text-blue-600"></i>
+                                </div>
+                                <div class="ml-4 flex-1">
+                                    <div class="flex items-center justify-between">
+                                        <p class="text-sm font-medium text-blue-600 truncate">
+                                            <?php echo htmlspecialchars($eleve['prenom'] . ' ' . $eleve['nom']); ?>
+                                        </p>
+                                        <div class="text-sm text-gray-500">
+                                            <?php echo $date_inscription ? $date_inscription->format('d/m/Y') : 'N/A'; ?>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center text-sm text-gray-500">
+                                        <span class="mr-2"><?php echo htmlspecialchars($eleve['matricule'] ?? 'N/A'); ?></span>
+                                        <span class="mx-1">•</span>
+                                        <span><?php echo htmlspecialchars($eleve['classe_nom'] ?? 'Non affecté'); ?></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+                <div class="bg-gray-50 px-6 py-3 text-right text-sm">
+                    <a href="<?php echo $secretaire_url; ?>/eleves.php" class="font-medium text-blue-600 hover:text-blue-500">
+                        Voir tous les élèves <span aria-hidden="true">&rarr;</span>
+                    </a>
+                </div>
+            <?php else: ?>
+                <div class="text-center py-12">
+                    <i class="fas fa-users-slash text-4xl text-gray-400 mb-3"></i>
+                    <p class="text-gray-500">Aucun élève enregistré pour le moment.</p>
+                    <div class="mt-4">
+                        <a href="<?php echo $secretaire_url; ?>/inscription.php" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                            <i class="fas fa-plus mr-2"></i> Ajouter un élève
+                        </a>
+                    </div>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
+
+    <!-- Statistiques par classe -->
+    <div class="bg-white shadow overflow-hidden sm:rounded-lg">
+        <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+            <h3 class="text-lg leading-6 font-medium text-gray-900">Effectifs par classe</h3>
+            <p class="mt-1 max-w-2xl text-sm text-gray-500">Répartition des élèves par classe et par sexe</p>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Classe
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Niveau
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Total
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Filles
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Garçons
+                        </th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    <?php if (!empty($stats['par_classe'])): ?>
                         <?php foreach ($stats['par_classe'] as $classe): ?>
-                        <tr>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                <?php echo htmlspecialchars($classe['classe'] . ' ' . $classe['niveau']); ?>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                <?php echo $classe['effectif']; ?>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                <?php echo $classe['filles']; ?>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                <?php echo $classe['garcons']; ?>
-                            </td>
-                        </tr>
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                    <?php echo htmlspecialchars($classe['classe']); ?>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    <?php echo htmlspecialchars($classe['niveau']); ?>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-center font-medium">
+                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                                        <?php echo $classe['effectif']; ?>
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-pink-600">
+                                    <?php echo $classe['filles']; ?>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-blue-600">
+                                    <?php echo $classe['garcons']; ?>
+                                </td>
+                            </tr>
                         <?php endforeach; ?>
-                        <?php if (empty($stats['par_classe'])): ?>
+                    <?php else: ?>
                         <tr>
-                            <td colspan="4" class="px-6 py-4 text-center text-sm text-gray-500">
-                                Aucune donnée statistique disponible.
+                            <td colspan="5" class="px-6 py-4 text-center text-sm text-gray-500">
+                                Aucune donnée disponible
                             </td>
                         </tr>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
-            </div>
+                    <?php endif; ?>
+                </tbody>
+            </table>
         </div>
     </div>
 </div>
 
 <!-- Scripts -->
 <script>
-// Gestion des onglets
-document.addEventListener('DOMContentLoaded', function() {
-    // Activer le premier onglet par défaut
-    const defaultTab = document.querySelector('.tab-link');
-    if (defaultTab) {
-        defaultTab.classList.add('border-blue-500', 'text-blue-600');
-        defaultTab.classList.remove('border-transparent', 'text-gray-500');
-        const tabId = defaultTab.getAttribute('data-tab');
-        document.getElementById(`${tabId}-tab`).classList.remove('hidden');
-    }
-
-    // Gestion du clic sur les onglets
-    document.querySelectorAll('.tab-link').forEach(tab => {
-        tab.addEventListener('click', function(e) {
-            e.preventDefault();
-            
-            // Désactiver tous les onglets
-            document.querySelectorAll('.tab-link').forEach(t => {
-                t.classList.remove('border-blue-500', 'text-blue-600');
-                t.classList.add('border-transparent', 'text-gray-500');
-            });
-            
-            // Masquer tous les contenus d'onglets
-            document.querySelectorAll('.tab-content').forEach(content => {
-                content.classList.add('hidden');
-            });
-            
-            // Activer l'onglet cliqué
-            this.classList.remove('border-transparent', 'text-gray-500');
-            this.classList.add('border-blue-500', 'text-blue-600');
-            
-            // Afficher le contenu correspondant
-            const tabId = this.getAttribute('data-tab');
-            document.getElementById(`${tabId}-tab`).classList.remove('hidden');
-        });
-    });
-});
-
-// Gestion de la soumission du formulaire d'inscription
-document.getElementById('inscriptionForm')?.addEventListener('submit', function(e) {
-    e.preventDefault();
-    
-    // Récupérer les données du formulaire
-    const formData = new FormData(this);
-    
-    // Afficher un indicateur de chargement
-    const submitBtn = this.querySelector('button[type="submit"]');
-    const originalBtnText = submitBtn.innerHTML;
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Enregistrement...';
-    
-    // Envoyer les données au serveur
-    fetch('traitement_inscription.php', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Afficher un message de succès
-            alert('Inscription enregistrée avec succès !');
-            // Réinitialiser le formulaire
-            this.reset();
-            // Recharger la page pour mettre à jour les statistiques
-            location.reload();
-        } else {
-            // Afficher un message d'erreur
-            alert('Erreur lors de l\'inscription : ' + (data.message || 'Une erreur est survenue'));
-        }
-    })
-    .catch(error => {
-        console.error('Erreur :', error);
-        alert('Une erreur est survenue lors de l\'envoi du formulaire.');
-    })
-    .finally(() => {
-        // Réactiver le bouton
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = originalBtnText;
-    });
-});
-
 // Fonction de recherche dans le tableau des élèves
 document.getElementById('searchInput')?.addEventListener('input', function() {
     const searchTerm = this.value.toLowerCase();
@@ -430,8 +281,6 @@ document.getElementById('searchInput')?.addEventListener('input', function() {
         }
     });
 });
-
-// Gestion de l'exportation des données
 document.getElementById('exportBtn')?.addEventListener('click', function() {
     // Ici, vous pouvez implémenter la logique d'exportation (Excel, PDF, etc.)
     alert('Fonctionnalité d\'exportation à implémenter');

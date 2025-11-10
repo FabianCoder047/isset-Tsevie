@@ -27,7 +27,7 @@ $secretaire_url = $base_url . '/secretaire';
 
 // Récupérer la liste des élèves depuis la base de données
 try {
-    $query = "SELECT e.*, c.nom as classe_nom 
+    $query = "SELECT e.*, c.nom as classe_nom, c.niveau as classe_niveau 
               FROM eleves e 
               LEFT JOIN classes c ON e.classe_id = c.id 
               ORDER BY e.nom, e.prenom";
@@ -70,6 +70,12 @@ include __DIR__ . '/includes/header.php';
                             Date de naissance
                         </th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Lieu de naissance
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Sexe
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Classe
                         </th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -109,10 +115,16 @@ include __DIR__ . '/includes/header.php';
                                     <?php echo !empty($eleve['date_naissance']) ? date('d/m/Y', strtotime($eleve['date_naissance'])) : 'Non spécifiée'; ?>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    <?php echo htmlspecialchars($eleve['lieu_naissance'] ?? 'Non spécifié'); ?>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    <?php echo htmlspecialchars($eleve['sexe'] ?? ''); ?>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                     <?php echo htmlspecialchars($eleve['classe_nom'] ?? 'Non affecté'); ?>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    <?php echo !empty($eleve['telephone']) ? htmlspecialchars($eleve['telephone']) : 'Non spécifié'; ?>
+                                    <?php echo !empty($eleve['contact_parent']) ? htmlspecialchars($eleve['contact_parent']) : 'Non spécifié'; ?>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                     <div class="flex justify-end space-x-2">
