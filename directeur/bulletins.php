@@ -2,10 +2,28 @@
 $pageTitle = 'Gestion des bulletins de notes';
 include 'includes/header.php';
 
+// Activer l'affichage des erreurs pour le débogage
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
 // Initialiser les variables
 $classes = [];
 $periodes = [];
 $error = null;
+
+try {
+    // Récupérer la liste des périodes d'évaluation depuis la base de données
+    $query = "SELECT id, nom, date_debut, date_fin, annee_scolaire, est_actif 
+              FROM periodes 
+              ORDER BY date_debut ASC";
+    $stmt = $db->query($query);
+    if ($stmt) {
+        $periodes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+} catch (PDOException $e) {
+    error_log("Erreur lors de la récupération des périodes: " . $e->getMessage());
+    $error = "Erreur lors du chargement des périodes d'évaluation.";
+}
 
 try {
     // Récupérer la liste des classes
@@ -19,30 +37,32 @@ try {
     $error = "Erreur lors du chargement des classes. Veuillez réessayer.";
 }
 
-try {
-    // Récupérer les périodes d'évaluation
-    $query = "SELECT * FROM periodes ORDER BY date_debut DESC";
-    $stmt = $db->query($query);
-    if ($stmt) {
-        $periodes = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-} catch (PDOException $e) {
-    error_log("Erreur lors de la récupération des périodes: " . $e->getMessage());
-    $error = $error ? $error . "<br>" : "";
-    $error .= "Erreur lors du chargement des périodes. Veuillez réessayer.";
-}
-
 // Récupérer les paramètres de l'URL
 $classe_id = isset($_GET['classe_id']) ? (int)$_GET['classe_id'] : 0;
 $periode_id = isset($_GET['periode_id']) ? (int)$_GET['periode_id'] : 0;
 
 $eleves = [];
 $matieres = [];
-$notes = [];
+$bulletins = [];
 
 // Si une classe et une période sont sélectionnées
 if ($classe_id > 0 && $periode_id > 0) {
     try {
+        // Trouver la période sélectionnée
+        $periode_courante = null;
+        foreach ($periodes as $p) {
+            if ($p['id'] == $periode_id) {
+                $periode_courante = $p;
+                break;
+            }
+        }
+
+        // Déterminer le semestre en fonction du nom de la période
+        $semestre = 1; // Par défaut, premier semestre
+        if ($periode_courante && preg_match('/2|deuxi[eè]me|second/i', $periode_courante['nom'])) {
+            $semestre = 2;
+        }
+        
         // Récupérer les élèves de la classe
         $query = "SELECT * FROM eleves WHERE classe_id = ? ORDER BY nom, prenom";
         $stmt = $db->prepare($query);
@@ -55,71 +75,113 @@ if ($classe_id > 0 && $periode_id > 0) {
         $stmt->execute([$classe_id]);
         $matieres = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
-        // Si on a des élèves et des matières, on peut essayer de récupérer les notes
-        if (!empty($eleves) && !empty($matieres)) {
+        if (empty($eleves)) {
+            $error = "Aucun élève trouvé dans cette classe.";
+        } elseif (empty($matieres)) {
+            $error = "Aucune matière trouvée pour cette classe.";
+        } else {
             $eleve_ids = array_column($eleves, 'id');
             $matiere_ids = array_column($matieres, 'id');
             
+            // Préparer les placeholders pour la requête SQL
+            $placeholders = rtrim(str_repeat('?,', count($eleve_ids)), ',');
+            $matiere_placeholders = rtrim(str_repeat('?,', count($matiere_ids)), ',');
+            
+            // Récupérer les notes avec les informations des élèves et des matières
+            $query = "SELECT n.*, m.nom as matiere_nom, e.nom as eleve_nom, e.prenom as eleve_prenom, 
+                             m.coefficient as coefficient
+                      FROM notes n 
+                      LEFT JOIN matieres m ON n.matiere_id = m.id 
+                      LEFT JOIN eleves e ON n.eleve_id = e.id 
+                      WHERE n.eleve_id IN ($placeholders) 
+                      AND n.matiere_id IN ($matiere_placeholders)
+                      AND n.semestre = ?
+                      AND n.classe_id = ?
+                      ORDER BY e.nom, e.prenom, m.nom";
+            
+            $params = array_merge($eleve_ids, $matiere_ids, [$semestre, $classe_id]);
+            
             try {
-                // Préparer les placeholders pour la requête SQL
-                $placeholders = rtrim(str_repeat('?,', count($eleve_ids)), ',');
-                $matiere_placeholders = rtrim(str_repeat('?,', count($matiere_ids)), ',');
-                
-                // Récupérer les notes avec les informations des élèves et des matières
-                $query = "SELECT n.*, m.nom as matiere_nom, e.nom as eleve_nom, e.prenom as eleve_prenom, 
-                                 m.coefficient as coefficient
-                          FROM notes n 
-                          LEFT JOIN matieres m ON n.matiere_id = m.id 
-                          LEFT JOIN eleves e ON n.eleve_id = e.id 
-                          WHERE n.eleve_id IN ($placeholders) 
-                          AND n.matiere_id IN ($matiere_placeholders)
-                          AND n.periode_id = ?
-                          ORDER BY e.nom, e.prenom, m.nom";
-                
-                $params = array_merge($eleve_ids, $matiere_ids, [$periode_id]);
                 $stmt = $db->prepare($query);
                 $stmt->execute($params);
                 $notes_result = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 
                 // Initialiser le tableau des bulletins avec des valeurs par défaut
                 foreach ($eleve_ids as $eleve_id) {
-                    $bulletins[$eleve_id] = [];
-                    foreach ($matiere_ids as $matiere_id) {
-                        $bulletins[$eleve_id][$matiere_id] = [
-                            'note' => null,
-                            'appreciation' => '',
-                            'coefficient' => 1
-                        ];
-                    }
-                }
-                
-                // Mettre à jour avec les données de la base
-                foreach ($notes_result as $note) {
-                    $eleve_id = $note['eleve_id'];
-                    $matiere_id = $note['matiere_id'];
+                    $eleve = array_filter($eleves, function($e) use ($eleve_id) {
+                        return $e['id'] == $eleve_id;
+                    });
+                    $eleve = reset($eleve);
                     
-                    if (isset($bulletins[$eleve_id][$matiere_id])) {
-                        $bulletins[$eleve_id][$matiere_id] = [
-                            'note' => $note['note'],
-                            'appreciation' => $note['appreciation'] ?? '',
-                            'coefficient' => $note['coefficient'] ?? 1,
-                            'matiere_nom' => $note['matiere_nom'] ?? 'Matière inconnue',
-                            'eleve_nom' => trim(($note['eleve_nom'] ?? '') . ' ' . ($note['eleve_prenom'] ?? ''))
+                    $bulletins[$eleve_id] = [
+                        'eleve_id' => $eleve_id,
+                        'eleve_nom' => $eleve['nom'] . ' ' . $eleve['prenom'],
+                        'matieres' => []
+                    ];
+                    
+                    foreach ($matieres as $matiere) {
+                        $note_data = [
+                            'matiere_id' => $matiere['id'],
+                            'matiere_nom' => $matiere['nom'],
+                            'coefficient' => $matiere['coefficient'],
+                            'interro1' => null,
+                            'interro2' => null,
+                            'devoir' => null,
+                            'compo' => null,
+                            'moyenne' => null
                         ];
+                        
+                        // Chercher si une note existe pour cet élève et cette matière
+                        foreach ($notes_result as $note) {
+                            if ($note['eleve_id'] == $eleve_id && $note['matiere_id'] == $matiere['id']) {
+                                $note_data['interro1'] = $note['interro1'];
+                                $note_data['interro2'] = $note['interro2'];
+                                $note_data['devoir'] = $note['devoir'];
+                                $note_data['compo'] = $note['compo'];
+                                
+                                // Calculer la moyenne
+                                $somme = 0;
+                                $nb_notes = 0;
+                                
+                                if (!is_null($note['interro1'])) {
+                                    $somme += $note['interro1'];
+                                    $nb_notes++;
+                                }
+                                if (!is_null($note['interro2'])) {
+                                    $somme += $note['interro2'];
+                                    $nb_notes++;
+                                }
+                                if (!is_null($note['devoir'])) {
+                                    $somme += $note['devoir'];
+                                    $nb_notes++;
+                                }
+                                if (!is_null($note['compo'])) {
+                                    $somme += $note['compo'] * 2; // La composition compte double
+                                    $nb_notes += 2;
+                                }
+                                
+                                if ($nb_notes > 0) {
+                                    $moyenne = $somme / $nb_notes;
+                                    $note_data['moyenne'] = number_format($moyenne, 2, ',', ' ');
+                                }
+                                
+                                break;
+                            }
+                        }
+                        
+                        $bulletins[$eleve_id]['matieres'][$matiere['id']] = $note_data;
                     }
                 }
                 
             } catch (PDOException $e) {
                 error_log("Erreur lors de la récupération des notes: " . $e->getMessage());
-                $error = $error ? $error . "<br>" : "";
-                $error .= "Une erreur est survenue lors du chargement des notes. Veuillez réessayer.";
+                $error = "Une erreur est survenue lors du chargement des notes: " . $e->getMessage();
             }
         }
         
     } catch (PDOException $e) {
-        error_log("Erreur lors de la récupération des données: " . $e->getMessage());
-        $error = $error ? $error . "<br>" : "";
-        $error .= "Erreur lors du chargement des données. Veuillez réessayer.";
+        error_log("Erreur: " . $e->getMessage());
+        $error = "Erreur lors du chargement des données: " . $e->getMessage();
     }
 }
 
@@ -153,7 +215,7 @@ if ($error): ?>
                     <option value="">Sélectionner une classe</option>
                     <?php foreach ($classes as $classe): ?>
                         <option value="<?php echo $classe['id']; ?>" <?php echo $classe_id == $classe['id'] ? 'selected' : ''; ?>>
-                            <?php echo htmlspecialchars($classe['niveau'] . ' ' . $classe['nom']); ?>
+                            <?php echo htmlspecialchars($classe['nom'] . ' ' . $classe['niveau']); ?>
                         </option>
                     <?php endforeach; ?>
                 </select>
@@ -166,7 +228,7 @@ if ($error): ?>
                     <option value="">Sélectionner une période</option>
                     <?php foreach ($periodes as $periode): ?>
                         <option value="<?php echo $periode['id']; ?>" <?php echo $periode_id == $periode['id'] ? 'selected' : ''; ?>>
-                            <?php echo htmlspecialchars($periode['nom'] . ' (' . date('d/m/Y', strtotime($periode['date_debut'])) . ' - ' . date('d/m/Y', strtotime($periode['date_fin'])) . ')'); ?>
+                            <?php echo htmlspecialchars($periode['nom']); ?>
                         </option>
                     <?php endforeach; ?>
                 </select>
@@ -191,7 +253,7 @@ if ($error): ?>
 </div>
 
 <?php if ($classe_id > 0 && $periode_id > 0): ?>
-    <?php if (empty($eleves)): ?>
+    <?php if (!empty($error)): ?>
         <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
             <div class="flex">
                 <div class="flex-shrink-0">
@@ -199,7 +261,20 @@ if ($error): ?>
                 </div>
                 <div class="ml-3">
                     <p class="text-sm text-yellow-700">
-                        Aucun élève n'est inscrit dans cette classe pour le moment.
+                        <?php echo $error; ?>
+                    </p>
+                </div>
+            </div>
+        </div>
+    <?php elseif (empty($eleves)): ?>
+        <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-exclamation-triangle h-5 w-5 text-yellow-400"></i>
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm text-yellow-700">
+                        Aucun élève trouvé dans cette classe.
                     </p>
                 </div>
             </div>
@@ -210,156 +285,95 @@ if ($error): ?>
                 <h3 class="text-lg font-medium leading-6 text-gray-900">
                     Bulletins de notes - 
                     <?php 
-                        $classe_selected = array_filter($classes, function($c) use ($classe_id) {
-                            return $c['id'] == $classe_id;
-                        });
-                        $classe_selected = reset($classe_selected);
-                        echo htmlspecialchars($classe_selected['niveau'] . ' ' . $classe_selected['nom']);
-                        
-                        $periode_selected = array_filter($periodes, function($p) use ($periode_id) {
-                            return $p['id'] == $periode_id;
-                        });
-                        $periode_selected = reset($periode_selected);
-                        echo ' - ' . htmlspecialchars($periode_selected['nom']);
+                    $classe = array_filter($classes, function($c) use ($classe_id) {
+                        return $c['id'] == $classe_id;
+                    });
+                    $classe = reset($classe);
+                    $periode = array_filter($periodes, function($p) use ($periode_id) {
+                        return $p['id'] == $periode_id;
+                    });
+                    $periode = reset($periode);
+                    echo htmlspecialchars($classe['nom'] . ' ' . $classe['niveau'] . ' - ' . $periode['nom']);
                     ?>
                 </h3>
             </div>
             
-            <div class="overflow-x-auto">
+            <div class="px-4 py-5 sm:p-0">
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50">
-                        <tr>
-                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Élève</th>
-                            <?php foreach ($matieres as $matiere): ?>
-                                <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider" title="<?php echo htmlspecialchars($matiere['nom']); ?>">
-                                    <?php echo strlen($matiere['nom']) > 10 ? substr($matiere['nom'], 0, 10) . '...' : $matiere['nom']; ?>
-                                    <div class="text-xs text-gray-400">Coef. <?php echo $matiere['coefficient']; ?></div>
-                                </th>
-                            <?php endforeach; ?>
-                            <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Moyenne</th>
-                            <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                        </tr>
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Élève
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Moyenne
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Actions
+                        </th>
+                    </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
+                    <?php foreach ($eleves as $eleve): ?>
                         <?php 
-                        if (empty($bulletins)) {
-                            echo '<tr><td colspan="' . (count($matieres) + 2) . '" class="px-6 py-4 text-center text-gray-500">Aucune note enregistrée pour cette période.</td></tr>';
+                        $has_notes = false;
+                        $moyenne_eleve = 0;
+                        $total_coeff = 0;
+                        
+                        if (isset($bulletins[$eleve['id']])) {
+                            foreach ($bulletins[$eleve['id']]['matieres'] as $matiere_id => $matiere_data) {
+                                if ($matiere_data['moyenne'] !== null) {
+                                    $has_notes = true;
+                                    $moyenne_eleve += (float)str_replace(',', '.', $matiere_data['moyenne']) * $matiere_data['coefficient'];
+                                    $total_coeff += $matiere_data['coefficient'];
+                                }
+                            }
+                        }
+                        
+                        if ($has_notes && $total_coeff > 0) {
+                            $moyenne_generale = $moyenne_eleve / $total_coeff;
+                            $couleur = $moyenne_generale >= 10 ? 'text-green-600' : 'text-red-600';
                         } else {
-                            foreach ($eleves as $eleve): 
-                                $total_points = 0;
-                                $total_coefficients = 0;
-                                $has_notes = false;
-                                $eleve_notes = $bulletins[$eleve['id']] ?? [];
-                            ?>
-                            <tr class="hover:bg-gray-50">
-                                <td class="px-6 py-4 whitespace-nowrap">
-                                    <div class="flex items-center">
-                                        <div class="flex-shrink-0 h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
-                                            <span class="text-blue-600 font-medium">
-                                                <?php echo strtoupper(substr($eleve['prenom'] ?? '', 0, 1) . substr($eleve['nom'] ?? '', 0, 1)); ?>
-                                            </span>
-                                        </div>
-                                        <div class="ml-4">
-                                            <div class="text-sm font-medium text-gray-900">
-                                                <?php echo htmlspecialchars(($eleve['nom'] ?? '') . ' ' . ($eleve['prenom'] ?? '')); ?>
-                                            </div>
-                                            <div class="text-sm text-gray-500">
-                                                <?php echo $eleve['matricule'] ?? ''; ?>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </td>
-                                
-                                <?php foreach ($matieres as $matiere): 
-                                    $matiere_id = $matiere['id'];
-                                    $note_data = $eleve_notes[$matiere_id] ?? [
-                                        'note' => null,
-                                        'appreciation' => '',
-                                        'coefficient' => $matiere['coefficient'] ?? 1
-                                    ];
-                                    
-                                    $note = $note_data['note'];
-                                    $coefficient = $note_data['coefficient'] ?? 1;
-                                    $points = $note !== null ? $note * $coefficient : 0;
-                                    $total_points += $points;
-                                    $total_coefficients += $coefficient;
-                                    $has_notes = $has_notes || $note !== null;
-                                    
-                                    // Déterminer la couleur en fonction de la note
-                                    $bg_color = '';
-                                    $text_color = 'text-gray-500';
-                                    if ($note !== null) {
-                                        if ($note < 10) {
-                                            $bg_color = 'bg-red-50';
-                                            $text_color = 'text-red-700';
-                                        } elseif ($note < 12) {
-                                            $bg_color = 'bg-yellow-50';
-                                            $text_color = 'text-yellow-700';
-                                        } else {
-                                            $bg_color = 'bg-green-50';
-                                            $text_color = 'text-green-700';
-                                        }
-                                    }
-                                ?>
-                                    <td class="px-2 py-4 whitespace-nowrap text-sm text-center">
-                                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full <?php echo $bg_color; ?> <?php echo $text_color; ?>">
-                                            <?php echo $note; ?>/20
-                                        </span>
-                                    </td>
-                                <?php endforeach; ?>
-                                
-                                <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
-                                    <?php if ($has_notes && $total_coefficients > 0): 
-                                        $moyenne = $total_points / $total_coefficients;
-                                    ?>
-                                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                                            <?php echo $moyenne >= 10 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'; ?>">
-                                            <?php echo number_format($moyenne, 2); ?>/20
-                                        </span>
-                                    <?php else: ?>
-                                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-50 text-gray-500">
-                                            -
-                                        </span>
-                                    <?php endif; ?>
-                                </td>
-                                
-                                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                    <?php if ($has_notes): ?>
-                                        <a href="voir_bulletin.php?eleve_id=<?php echo $eleve['id']; ?>&periode_id=<?php echo $periode_id; ?>" 
-                                           class="text-blue-600 hover:text-blue-900 mr-4"
-                                           target="_blank"
-                                           title="Voir le bulletin">
-                                            <i class="fas fa-eye"></i> Voir
-                                        </a>
-                                        <a href="editer_bulletin.php?eleve_id=<?php echo $eleve['id']; ?>&periode_id=<?php echo $periode_id; ?>" 
-                                           class="text-indigo-600 hover:text-indigo-900 mr-4"
-                                           target="_blank"
-                                           title="Éditer les notes">
-                                            <i class="fas fa-edit"></i> Éditer
-                                        </a>
-                                    <?php else: ?>
-                                        <span class="text-gray-400 mr-4" title="Aucune note enregistrée">
-                                            <i class="fas fa-eye-slash"></i> Voir
-                                        </span>
-                                        <a href="editer_bulletin.php?eleve_id=<?php echo $eleve['id']; ?>&periode_id=<?php echo $periode_id; ?>" 
-                                           class="text-indigo-300 hover:text-indigo-400 mr-4"
-                                           target="_blank"
-                                           title="Ajouter des notes">
-                                            <i class="fas fa-plus-circle"></i> Ajouter
-                                        </a>
-                                    <?php endif; ?>
-                                    <a href="generer_bulletin_pdf.php?eleve_id=<?php echo $eleve['id']; ?>&periode_id=<?php echo $periode_id; ?>" 
-                                       class="text-green-600 hover:text-green-800"
-                                       target="_blank"
-                                       title="Télécharger le PDF">
-                                        <i class="fas fa-file-pdf"></i> PDF
-                                    </a>
-                                </td>
-                            </tr>
-                        <?php 
-                            endforeach; // Fin de la boucle foreach des élèves
-                        } // Fin du else (si $bulletins n'est pas vide)
+                            $couleur = 'text-gray-400';
+                        }
                         ?>
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                <?php echo htmlspecialchars($eleve['nom'] . ' ' . $eleve['prenom']); ?>
+                            </td>
+                            
+                            <?php endforeach; ?>
+                            
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-gray-900">
+                                <?php 
+                                if ($has_notes && $total_coeff > 0) {
+                                    $moyenne_generale = $moyenne_eleve / $total_coeff;
+                                    $couleur = $moyenne_generale >= 10 ? 'text-green-600' : 'text-red-600';
+                                    echo '<span class="font-semibold ' . $couleur . '">' . number_format($moyenne_generale, 2, ',', ' ') . ' / 20</span>';
+                                } else {
+                                    echo '<span class="text-gray-400">-</span>';
+                                }
+                                ?>
+                            </td>
+                            
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                                <?php if ($has_notes): ?>
+                                    <a href="voir_bulletin.php?eleve_id=<?php echo $eleve['id']; ?>&classe_id=<?php echo $classe_id; ?>&periode_id=<?php echo $periode_id; ?>" 
+                                       class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                                       title="Voir le bulletin">
+                                        <i class="fas fa-eye mr-1"></i> Voir
+                                    </a>
+                                    <a href="generer_bulletin_pdf.php?eleve_id=<?php echo $eleve['id']; ?>&classe_id=<?php echo $classe_id; ?>&periode_id=<?php echo $periode_id; ?>" 
+                                       class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                                       title="Télécharger le PDF"
+                                       target="_blank">
+                                        <i class="fas fa-file-pdf mr-1"></i> PDF
+                                    </a>
+                                <?php else: ?>
+                                    <span class="text-gray-400 text-sm">-</span>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
                     </tbody>
                 </table>
             </div>

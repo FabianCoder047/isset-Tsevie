@@ -1,4 +1,5 @@
 <?php
+require_once 'config/paths.php';
 require_once 'includes/auth.php';
 require_once 'config/log_config.php';
 
@@ -16,12 +17,21 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 // Rediriger si déjà connecté
-if ($auth->isLoggedIn()) {
+if ($auth->isLoggedIn() && !isset($_GET['logged_out'])) {
     app_log("Redirection depuis login.php - utilisateur déjà connecté", [
         'user_id' => $_SESSION['user_id'] ?? null,
         'user_role' => $_SESSION['user_role'] ?? null
     ]);
-    $auth->redirectUser();
+    
+    // Déterminer la page de destination en fonction du rôle
+    $role_pages = [
+        'professeur' => 'professeur/index.php',
+        'secretaire' => 'secretaire/index.php',
+        'directeur' => 'directeur/index.php'
+    ];
+    
+    $target_page = $role_pages[$_SESSION['user_role']] ?? 'index.php';
+    redirect($target_page);
     exit();
 }
 
@@ -100,12 +110,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php if ($error): ?>
         <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
             <?php echo htmlspecialchars($error); ?>
-        </div>
-        <?php endif; ?>
-        
-        <?php if ($success): ?>
-        <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
-            <?php echo htmlspecialchars($success); ?>
         </div>
         <?php endif; ?>
 

@@ -76,10 +76,15 @@ class Auth {
                         'directeur' => 'directeur/index.php'
                     ];
                     
-                    $target_page = $role_pages[$user['role']] ?? 'index.php';
-                    
-                    app_log("Redirection vers: " . $target_page);
-                    $this->redirectTo($target_page);
+                    // Vérifier si c'est la première connexion
+                    if ($user['first_login'] == 1) {
+                        app_log("Première connexion - redirection vers change-password.php");
+                        $this->redirectTo('change-password.php');
+                    } else {
+                        $target_page = $role_pages[$user['role']] ?? 'index.php';
+                        app_log("Redirection vers: " . $target_page);
+                        $this->redirectTo($target_page);
+                    }
                     exit();
                 } else {
                     app_log("Échec de la connexion: mot de passe incorrect", ['email' => $email]);
@@ -150,7 +155,7 @@ class Auth {
         if (isset($_SESSION['first_login']) && $_SESSION['first_login'] == 1) {
             $current_script = basename(parse_url($_SERVER['SCRIPT_NAME'], PHP_URL_PATH));
             if ($current_script !== 'change-password.php') {
-                // Utiliser un chemin absolu pour éviter les problèmes de répertoire
+                // Utiliser un chemin absolu pour la redirection
                 $this->redirectTo('/isset/change-password.php');
                 return;
             }
@@ -195,79 +200,28 @@ class Auth {
     
     // Méthode utilitaire pour gérer les redirections
     private function redirectTo($path) {
-        // Si le chemin commence par /, c'est un chemin absolu
-        if (strpos($path, '/') === 0) {
-            // C'est déjà un chemin absolu, on l'utilise tel quel
-            $full_url = $path;
-        } 
-        // Si c'est une URL complète, on l'utilise telle quelle
-        elseif (filter_var($path, FILTER_VALIDATE_URL) !== false) {
-            $full_url = $path;
-        } 
-        // Sinon, on construit l'URL complète
-        else {
-            // Déterminer le protocole (http ou https)
-            $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https://' : 'http://';
-            
-            // Déterminer l'hôte
-            $host = $_SERVER['HTTP_HOST'];
-            
-            // Construire le chemin de base
-            $base_path = '';
-            
-            // Si on est dans un sous-dossier, on l'ajoute au chemin
-            $script_name = dirname($_SERVER['SCRIPT_NAME']);
-            if ($script_name !== '/') {
-                $base_path = rtrim($script_name, '/');
-            }
-            
-            // Construire l'URL complète
-            $full_url = rtrim($protocol . $host . $base_path, '/') . '/' . ltrim($path, '/');
-        }
+        require_once __DIR__ . '/../config/paths.php';
         
-        // Nettoyer les doubles slashes sauf après le protocole
-        $full_url = preg_replace('/([^:])(\/\/)/', '$1/', $full_url);
-        
-        // URL actuelle
-        $current_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https://' : 'http://') . 
-                      $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
-        
-        // Normaliser les URL pour la comparaison
-        $normalized_current = rtrim(strtolower($current_url), '/');
-        $normalized_target = rtrim(strtolower($full_url), '/');
-        
-        // Log des informations de débogage
-        app_log("Tentative de redirection", [
-            'current_url' => $current_url,
-            'target_url' => $full_url,
-            'normalized_current' => $normalized_current,
-            'normalized_target' => $normalized_target,
-            'path_param' => $path,
-            'server' => [
-                'HTTPS' => $_SERVER['HTTPS'] ?? 'non défini',
-                'HTTP_HOST' => $_SERVER['HTTP_HOST'],
-                'REQUEST_URI' => $_SERVER['REQUEST_URI'],
-                'SCRIPT_NAME' => $_SERVER['SCRIPT_NAME']
-            ],
-            'session' => $_SESSION
-        ]);
-        
-        // Vérifier si nous ne sommes pas déjà sur cette URL
-        if ($normalized_current !== $normalized_target) {
-            app_log("Redirection vers: " . $full_url);
-            
-            // Vérifier si les en-têtes ont déjà été envoyés
-            if (headers_sent($filename, $linenum)) {
-                app_log("Erreur: Les en-têtes ont déjà été envoyés dans $filename à la ligne $linenum");
-                echo "<script>window.location.href='$full_url';</script>";
-                exit();
-            } else {
-                header('Location: ' . $full_url, true, 302);
-                exit();
-            }
+        // Si le chemin commence par http, c'est déjà une URL complète
+        if (strpos($path, 'http') === 0) {
+            $url = $path;
         } else {
-            app_log("Aucune redirection nécessaire - déjà sur la bonne URL");
+            // Si le chemin commence par un slash, on le retire pour utiliser url() correctement
+            $path = ltrim($path, '/');
+            // Construire l'URL à partir du chemin relatif
+            $url = url($path);
         }
+        
+        app_log("Redirection vers: " . $url);
+        
+        // Vérifier si les en-têtes ont déjà été envoyés
+        if (headers_sent($filename, $linenum)) {
+            app_log("Erreur: Les en-têtes ont déjà été envoyés dans $filename à la ligne $linenum");
+            echo "<script>window.location.href='$url';</script>";
+        } else {
+            header('Location: ' . $url, true, 302);
+        }
+        exit();
     }
     
     // Récupérer le nom de l'utilisateur connecté

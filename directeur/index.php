@@ -87,13 +87,7 @@ try {
     </div>
 </div>
 
-<!-- Graphique des effectifs -->
-<div class="bg-white rounded-lg shadow p-6 mb-8">
-    <h2 class="text-lg font-semibold mb-4">Répartition des effectifs par niveau</h2>
-    <div class="h-80">
-        <canvas id="studentsByLevelChart"></canvas>
-    </div>
-</div>
+
 
 
 <!-- Prochaines échéances -->
@@ -132,7 +126,7 @@ try {
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     // Graphique des effectifs par niveau

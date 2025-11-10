@@ -8,7 +8,7 @@ $stmt = $db->query($query);
 $classes = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
 
 // Récupérer les matières existantes
-$query = "SELECT m.*, c.nom as classe_nom FROM matieres m 
+$query = "SELECT m.*, c.nom as classe_nom ,c.niveau as classe_niveau FROM matieres m 
           LEFT JOIN classes c ON m.classe_id = c.id 
           ORDER BY c.niveau, c.nom, m.nom";
 $matieres = [];
@@ -128,7 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajouter_matiere'])) {
                             <tr>
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     <div class="text-sm font-medium text-gray-900">
-                                        <?php echo htmlspecialchars($matiere['classe_nom']); ?>
+                                        <?php echo htmlspecialchars($matiere['classe_nom'].' '.$matiere['classe_niveau']); ?>
                                     </div>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap">

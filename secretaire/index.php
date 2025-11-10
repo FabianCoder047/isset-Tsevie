@@ -81,7 +81,7 @@ try {
 // Récupérer la liste des élèves
 $eleves = [];
 try {
-    $query = "SELECT e.*, c.nom as classe_nom, c.niveau 
+    $query = "SELECT e.*, c.nom as classe_nom, c.niveau as classe_niveau 
               FROM eleves e 
               LEFT JOIN classes c ON e.classe_id = c.id 
               ORDER BY e.nom, e.prenom";
@@ -176,7 +176,7 @@ try {
                                     <div class="flex items-center text-sm text-gray-500">
                                         <span class="mr-2"><?php echo htmlspecialchars($eleve['matricule'] ?? 'N/A'); ?></span>
                                         <span class="mx-1">•</span>
-                                        <span><?php echo htmlspecialchars($eleve['classe_nom'] ?? 'Non affecté'); ?></span>
+                                        <span><?php echo htmlspecialchars($eleve['classe_nom']. ' ' . $eleve['classe_niveau'] ?? 'Non affecté'); ?></span>
                                     </div>
                                 </div>
                             </div>

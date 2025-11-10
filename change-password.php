@@ -1,9 +1,25 @@
 <?php
-session_start();
-require_once 'includes/auth.php';
+// Démarrer la session si elle n'est pas déjà démarrée
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// Inclure le fichier de configuration des chemins
+require_once __DIR__ . '/config/paths.php';
+
+// Inclure la configuration de la base de données
+require_once __DIR__ . '/includes/db.php';
+
+// Initialiser la connexion à la base de données
+$db = new PDO("mysql:host=localhost;dbname=isset_tsevie", 'root', '');
+$db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+// Inclure la classe d'authentification
+require_once __DIR__ . '/includes/auth.php';
+$auth = new Auth($db);
 
 // Rediriger si pas connecté ou si le mot de passe a déjà été changé
-if (!$auth->isLoggedIn() || $_SESSION['first_login'] == 0) {
+if (!$auth->isLoggedIn() || !isset($_SESSION['first_login']) || $_SESSION['first_login'] == 0) {
     $auth->redirectUser();
 }
 
@@ -23,6 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         // Mettre à jour le mot de passe
         if ($auth->updatePassword($_SESSION['user_id'], $newPassword)) {
+            // Mettre à jour la session
             $_SESSION['first_login'] = 0;
             $success = 'Votre mot de passe a été mis à jour avec succès.';
             
@@ -35,8 +52,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             $target_page = $role_pages[$_SESSION['user_role']] ?? 'index.php';
             
-            // Rediriger après 2 secondes vers la page appropriée
-            header('Refresh: 2; URL=' . $target_page);
+            // Rediriger vers la page appropriée après 2 secondes
+            $redirect_url = rtrim(BASE_URL, '/') . '/' . ltrim($target_page, '/');
+            header('Refresh: 2; URL=' . $redirect_url);
         } else {
             $error = 'Une erreur est survenue lors de la mise à jour du mot de passe.';
         }

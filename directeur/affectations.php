@@ -76,7 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajouter_affectation']
                     <option value="">Sélectionner une classe</option>
                     <?php foreach ($classes as $classe): ?>
                         <option value="<?php echo $classe['id']; ?>">
-                            <?php echo htmlspecialchars($classe['niveau'] . ' ' . $classe['nom']); ?>
+                            <?php echo htmlspecialchars($classe['nom'] . ' ' . $classe['niveau']); ?>
                         </option>
                     <?php endforeach; ?>
                 </select>
