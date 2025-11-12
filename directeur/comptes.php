@@ -9,84 +9,107 @@ require_once dirname(__DIR__) . '/includes/db.php';
 $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && 
           strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
 
-// Gestion de l'ajout d'utilisateur via AJAX
+// === GESTION AJAX UNIFIÉE ===
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
-    // Nettoyer le buffer de sortie pour éviter tout contenu indésirable
     while (ob_get_level()) ob_end_clean();
-    
     header('Content-Type: application/json');
-    
     $response = ['success' => false, 'message' => ''];
-    $nom = trim($_POST['nom'] ?? '');
-    $prenom = trim($_POST['prenom'] ?? '');
-    $email = trim($_POST['email'] ?? '');
-    $role = $_POST['role'] ?? '';
-    
-    try {
-        // Validation des champs obligatoires
-        if (empty($nom) || empty($prenom) || empty($email) || empty($role)) {
-            throw new Exception("Tous les champs sont obligatoires");
-        }
-        
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            throw new Exception("L'adresse email n'est pas valide");
-        }
-        
-        $username = strtolower($prenom[0] . str_replace(' ', '', $nom));
-        $password = password_hash('isset123', PASSWORD_DEFAULT);
-        
-        // Vérifier si l'email existe déjà
-        $stmt = $db->prepare("SELECT id FROM utilisateurs WHERE email = ?");
-        $stmt->execute([$email]);
-        
-        if ($stmt->rowCount() > 0) {
-            throw new Exception("Un utilisateur avec cet email existe déjà.");
-        }
-        
-        // Générer un nom d'utilisateur unique si nécessaire
-        $base_username = $username;
-        $counter = 1;
-        
-        do {
-            $stmt = $db->prepare("SELECT id FROM utilisateurs WHERE username = ?");
-            $stmt->execute([$username]);
-            if ($stmt->rowCount() > 0) {
-                $username = $base_username . $counter;
-                $counter++;
-            } else {
-                break;
+
+    // --- Modification d'utilisateur ---
+    if (isset($_POST['update_user'])) {
+        $userId = (int)$_POST['user_id'];
+        $nom = trim($_POST['nom']);
+        $prenom = trim($_POST['prenom']);
+        $email = trim($_POST['email']);
+        $role = $_POST['role'];
+        $statut = $_POST['statut'] ?? 'actif';
+        $resetPassword = isset($_POST['reset_password']);
+        try {
+            if (empty($nom) || empty($prenom) || empty($email) || empty($role)) {
+                throw new Exception("Tous les champs sont obligatoires");
             }
-        } while (true);
-        
-        // Insérer le nouvel utilisateur
-        $query = "INSERT INTO utilisateurs (nom, prenom, email, username, password, role, statut, date_creation) 
-                  VALUES (?, ?, ?, ?, ?, ?, 'actif', NOW())";
-        $stmt = $db->prepare($query);
-        
-        if ($stmt->execute([$nom, $prenom, $email, $username, $password, $role])) {
-            $response['success'] = true;
-            $response['message'] = 'Utilisateur créé avec succès';
-            $response['user'] = [
-                'id' => $db->lastInsertId(),
-                'nom' => $nom,
-                'prenom' => $prenom,
-                'email' => $email,
-                'username' => $username,
-                'role' => $role,
-                'statut' => 'actif',
-                'date_creation' => date('Y-m-d H:i:s')
-            ];
-            
-            // Générer le HTML du tableau des utilisateurs
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                throw new Exception("L'adresse email n'est pas valide");
+            }
+            $stmt = $db->prepare("SELECT id FROM utilisateurs WHERE email = ? AND id != ?");
+            $stmt->execute([$email, $userId]);
+            if ($stmt->rowCount() > 0) {
+                throw new Exception("Un utilisateur avec cet email existe déjà.");
+            }
+            $query = "UPDATE utilisateurs SET nom = ?, prenom = ?, email = ?, role = ?, statut = ? WHERE id = ?";
+            $stmt = $db->prepare($query);
+            $stmt->execute([$nom, $prenom, $email, $role, $statut, $userId]);
+            if ($resetPassword) {
+                $password = password_hash('isset123', PASSWORD_DEFAULT);
+                $stmt_pw = $db->prepare("UPDATE utilisateurs SET password = ? WHERE id = ?");
+                $stmt_pw->execute([$password, $userId]);
+            }
             require_once 'includes/users_table_rows.php';
+            $response['success'] = true;
+            $response['message'] = "Utilisateur modifié avec succès.";
             $response['html'] = generateUsersTableRows($db);
-        } else {
-            throw new Exception("Erreur lors de la création du compte");
+        } catch (Exception $e) {
+            $response['message'] = $e->getMessage();
         }
-    } catch (Exception $e) {
-        $response['message'] = $e->getMessage();
+    } else {
+        // --- Ajout d'utilisateur ---
+        $nom = trim($_POST['nom'] ?? '');
+        $prenom = trim($_POST['prenom'] ?? '');
+        $email = trim($_POST['email'] ?? '');
+        $role = $_POST['role'] ?? '';
+        try {
+            if (empty($nom) || empty($prenom) || empty($email) || empty($role)) {
+                throw new Exception("Tous les champs sont obligatoires");
+            }
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                throw new Exception("L'adresse email n'est pas valide");
+            }
+            $username = strtolower($prenom[0] . str_replace(' ', '', $nom));
+            $password = password_hash('isset123', PASSWORD_DEFAULT);
+            // Vérifier si l'email existe déjà
+            $stmt = $db->prepare("SELECT id FROM utilisateurs WHERE email = ?");
+            $stmt->execute([$email]);
+            if ($stmt->rowCount() > 0) {
+                throw new Exception("Un utilisateur avec cet email existe déjà.");
+            }
+            // Générer un nom d'utilisateur unique si nécessaire
+            $base_username = $username;
+            $counter = 1;
+            do {
+                $stmt = $db->prepare("SELECT id FROM utilisateurs WHERE username = ?");
+                $stmt->execute([$username]);
+                if ($stmt->rowCount() > 0) {
+                    $username = $base_username . $counter;
+                    $counter++;
+                } else {
+                    break;
+                }
+            } while (true);
+            // Insérer le nouvel utilisateur
+            $query = "INSERT INTO utilisateurs (nom, prenom, email, username, password, role, statut, date_creation) VALUES (?, ?, ?, ?, ?, ?, 'actif', NOW())";
+            $stmt = $db->prepare($query);
+            if ($stmt->execute([$nom, $prenom, $email, $username, $password, $role])) {
+                require_once 'includes/users_table_rows.php';
+                $response['success'] = true;
+                $response['message'] = 'Utilisateur créé avec succès';
+                $response['user'] = [
+                    'id' => $db->lastInsertId(),
+                    'nom' => $nom,
+                    'prenom' => $prenom,
+                    'email' => $email,
+                    'username' => $username,
+                    'role' => $role,
+                    'statut' => 'actif',
+                    'date_creation' => date('Y-m-d H:i:s')
+                ];
+                $response['html'] = generateUsersTableRows($db);
+            } else {
+                throw new Exception("Erreur lors de la création du compte");
+            }
+        } catch (Exception $e) {
+            $response['message'] = $e->getMessage();
+        }
     }
-    
     echo json_encode($response);
     exit;
 }
@@ -101,6 +124,89 @@ if (!$isAjax) {
 function getUtilisateurs($db) {
     $query = "SELECT * FROM utilisateurs WHERE role IN ('professeur', 'secretaire') ORDER BY nom, prenom";
     return $db->query($query)->fetchAll(PDO::FETCH_ASSOC);
+}
+
+// Gestion de la suppression d'un utilisateur
+if (isset($_GET['delete']) && is_numeric($_GET['delete'])) {
+    $userId = (int)$_GET['delete'];
+    try {
+        // Vérifier si l'utilisateur existe
+        $stmt = $db->prepare("SELECT * FROM utilisateurs WHERE id = ?");
+        $stmt->execute([$userId]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($user) {
+            // Vérifier les dépendances avant de supprimer
+            $hasDependencies = false;
+            $dependencies = [];
+            
+            // Vérifier les affectations
+            $stmt = $db->prepare("SELECT COUNT(*) as count FROM enseignements WHERE professeur_id = ?");
+            $stmt->execute([$userId]);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($result['count'] > 0) {
+                $hasDependencies = true;
+                $dependencies[] = 'enseignements';
+            }
+            
+            if ($hasDependencies) {
+                $error = "Impossible de supprimer cet utilisateur car il est lié à des " . implode(', ', $dependencies) . ".";
+            } else {
+                // Supprimer l'utilisateur
+                $stmt = $db->prepare("DELETE FROM utilisateurs WHERE id = ?");
+                if ($stmt->execute([$userId])) {
+                    $success = "L'utilisateur a été supprimé avec succès.";
+                } else {
+                    throw new Exception("Erreur lors de la suppression de l'utilisateur");
+                }
+            }
+        } else {
+            $error = "Utilisateur introuvable.";
+        }
+    } catch (Exception $e) {
+        $error = "Erreur : " . $e->getMessage();
+    }
+    
+    // Rediriger pour éviter la soumission multiple du formulaire
+    header('Location: comptes.php' . (isset($error) ? '?error=' . urlencode($error) : '?success=1'));
+    exit;
+}
+
+// Gestion de la modification d'un utilisateur
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_user'])) {
+    // fallback non-AJAX uniquement
+    $userId = (int)$_POST['user_id'];
+    $nom = trim($_POST['nom']);
+    $prenom = trim($_POST['prenom']);
+    $email = trim($_POST['email']);
+    $role = $_POST['role'];
+    $statut = $_POST['statut'] ?? 'actif';
+    $resetPassword = isset($_POST['reset_password']);
+    try {
+        if (empty($nom) || empty($prenom) || empty($email) || empty($role)) {
+            throw new Exception("Tous les champs sont obligatoires");
+        }
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            throw new Exception("L'adresse email n'est pas valide");
+        }
+        $stmt = $db->prepare("SELECT id FROM utilisateurs WHERE email = ? AND id != ?");
+        $stmt->execute([$email, $userId]);
+        if ($stmt->rowCount() > 0) {
+            throw new Exception("Un autre utilisateur utilise déjà cette adresse email");
+        }
+        $query = "UPDATE utilisateurs SET nom = ?, prenom = ?, email = ?, role = ?, statut = ? WHERE id = ?";
+        $stmt = $db->prepare($query);
+        $stmt->execute([$nom, $prenom, $email, $role, $statut, $userId]);
+        if ($resetPassword) {
+            $password = password_hash('isset123', PASSWORD_DEFAULT);
+            $stmt_pw = $db->prepare("UPDATE utilisateurs SET password = ? WHERE id = ?");
+            $stmt_pw->execute([$password, $userId]);
+        }
+    } catch (Exception $e) {
+        $error = $e->getMessage();
+    }
+    header('Location: comptes.php' . (isset($error) ? '?error=' . urlencode($error) : '?success=2'));
+    exit;
 }
 
 // Récupérer la liste des utilisateurs (professeurs et secrétaires)
@@ -182,9 +288,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
         <h2 class="text-xl font-semibold">Ajouter un utilisateur</h2>
     </div>
     
-    <?php if (isset($error)): ?>
+    <?php if (isset($_GET['error'])): ?>
         <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4" role="alert">
-            <p><?php echo $error; ?></p>
+            <p><?php echo htmlspecialchars(urldecode($_GET['error'])); ?></p>
+        </div>
+    <?php endif; ?>
+    
+    <?php if (isset($_GET['success'])): ?>
+        <div class="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 mb-4" role="alert">
+            <p><?php echo ($_GET['success'] == 1) ? 'Utilisateur supprimé avec succès.' : 'Utilisateur mis à jour avec succès.'; ?></p>
         </div>
     <?php endif; ?>
     
@@ -291,7 +403,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
                         Modifier l'utilisateur
                     </h3>
                     <div class="mt-4">
-                        <form id="editUserForm" method="POST">
+                        <form id="editUserForm" method="POST" action="comptes.php">
+                            <input type="hidden" name="update_user" value="1">
                             <input type="hidden" name="user_id" id="edit_user_id">
                             <div class="space-y-4">
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -340,26 +453,78 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isAjax) {
                                         </label>
                                     </div>
                                 </div>
+                                <div class="mt-5 sm:mt-6 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense">
+                                    <button type="submit"
+                                            class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:col-start-2 sm:text-sm">
+                                        Enregistrer
+                                    </button>
+                                    <button type="button" onclick="closeEditModal()"
+                                            class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:col-start-1 sm:text-sm">
+                                        Annuler
+                                    </button>
+                                </div>
                             </div>
                         </form>
                     </div>
                 </div>
-            </div>
-            <div class="mt-5 sm:mt-6 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense">
-                <button type="button" id="saveUserChangesBtn"
-                        class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:col-start-2 sm:text-sm">
-                    Enregistrer
-                </button>
-                <button type="button" id="cancelEditUserBtn"
-                        class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:col-start-1 sm:text-sm">
-                    Annuler
-                </button>
             </div>
         </div>
     </div>
 </div>
 
 <script>
+// Fonction pour ouvrir la modale d'édition avec les données de l'utilisateur
+function editUser(user) {
+    if (!user) return;
+    
+    // Remplir le formulaire avec les données de l'utilisateur
+    document.getElementById('edit_user_id').value = user.id || '';
+    document.getElementById('edit_nom').value = user.nom || '';
+    document.getElementById('edit_prenom').value = user.prenom || '';
+    document.getElementById('edit_email').value = user.email || '';
+    
+    // Sélectionner le rôle
+    const roleSelect = document.getElementById('edit_role');
+    if (roleSelect) {
+        for (let i = 0; i < roleSelect.options.length; i++) {
+            if (roleSelect.options[i].value === user.role) {
+                roleSelect.selectedIndex = i;
+                break;
+            }
+        }
+    }
+    
+    // Sélectionner le statut
+    const statutSelect = document.getElementById('edit_statut');
+    if (statutSelect) {
+        for (let i = 0; i < statutSelect.options.length; i++) {
+            if (statutSelect.options[i].value === user.statut) {
+                statutSelect.selectedIndex = i;
+                break;
+            }
+        }
+    }
+    
+    // Réinitialiser la case à cocher de réinitialisation de mot de passe
+    document.getElementById('reset_password').checked = false;
+    
+    // Afficher la modale
+    document.getElementById('editUserModal').classList.remove('hidden');
+}
+
+// Fonction pour fermer la modale d'édition
+function closeEditModal() {
+    document.getElementById('editUserModal').classList.add('hidden');
+}
+
+// Fonction pour confirmer la suppression d'un utilisateur
+function confirmDelete(userId, userName) {
+    if (confirm(`Êtes-vous sûr de vouloir supprimer l'utilisateur "${userName}" ?`)) {
+        window.location.href = `comptes.php?delete=${userId}`;
+    }
+    return false;
+}
+
 // Fonction pour rafraîchir la liste des utilisateurs
 function refreshUsersList() {
     fetch('includes/users_table_rows.php')
@@ -503,46 +668,99 @@ function confirmDelete(userId, userName) {
     }
 }
 
+// Fonction pour ouvrir la modale d'édition avec les données de l'utilisateur
+function editUser(user) {
+    if (!user) return;
+    
+    // Remplir le formulaire avec les données de l'utilisateur
+    document.getElementById('edit_user_id').value = user.id || '';
+    document.getElementById('edit_nom').value = user.nom || '';
+    document.getElementById('edit_prenom').value = user.prenom || '';
+    document.getElementById('edit_email').value = user.email || '';
+    
+    // Sélectionner le rôle
+    const roleSelect = document.getElementById('edit_role');
+    if (roleSelect) {
+        for (let i = 0; i < roleSelect.options.length; i++) {
+            if (roleSelect.options[i].value === user.role) {
+                roleSelect.selectedIndex = i;
+                break;
+            }
+        }
+    }
+    
+    // Sélectionner le statut
+    const statutSelect = document.getElementById('edit_statut');
+    if (statutSelect) {
+        for (let i = 0; i < statutSelect.options.length; i++) {
+            if (statutSelect.options[i].value === user.statut) {
+                statutSelect.selectedIndex = i;
+                break;
+            }
+        }
+    }
+    
+    // Réinitialiser la case à cocher de réinitialisation de mot de passe
+    document.getElementById('reset_password').checked = false;
+    
+    // Afficher la modale
+    document.getElementById('editUserModal').classList.remove('hidden');
+}
+
+// Fonction pour fermer la modale d'édition
+function closeEditModal() {
+    document.getElementById('editUserModal').classList.add('hidden');
+}
+
+// Fonction pour confirmer la suppression d'un utilisateur
+function confirmDelete(userId, userName) {
+    if (confirm(`Êtes-vous sûr de vouloir supprimer l'utilisateur "${userName}" ?`)) {
+        window.location.href = `comptes.php?delete=${userId}`;
+    }
+    return false;
+}
+
 document.addEventListener('DOMContentLoaded', function() {
-    const editModal = document.getElementById('editUserModal');
     const editForm = document.getElementById('editUserForm');
-    const saveChangesBtn = document.getElementById('saveUserChangesBtn');
-    const cancelEditBtn = document.getElementById('cancelEditUserBtn');
     
-    // Annuler l'édition
-    cancelEditBtn.addEventListener('click', function() {
-        editModal.classList.add('hidden');
-    });
-    
-    // Sauvegarder les modifications
-    saveChangesBtn.addEventListener('click', function() {
-        // Ici, vous devrez implémenter la logique pour sauvegarder les modifications via AJAX
-        // Par exemple :
-        /*
+    // Gestion de la soumission du formulaire
+    editForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        // Récupérer les données du formulaire
         const formData = new FormData(editForm);
-        fetch('update_user.php', {
+        
+        // Envoyer les données via AJAX
+        fetch('comptes.php', {
             method: 'POST',
-            body: formData
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
         })
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                // Recharger la page ou mettre à jour uniquement les données modifiées
-                location.reload();
+                // Mise à jour dynamique du tableau
+                if (data.html) {
+                    document.getElementById('usersTableBody').innerHTML = data.html;
+                }
+                // Afficher la notif
+                showAlert('success', data.message || 'Modifié');
+                // Fermer la modale
+                closeEditModal();
             } else {
-                alert('Erreur lors de la mise à jour : ' + data.message);
+                alert('Erreur : ' + (data.message || 'Une erreur est survenue'));
             }
+        })
+        .catch(error => {
+            console.error('Erreur :', error);
+            alert('Une erreur est survenue lors de la mise à jour');
         });
-        */
-        
-        // Pour l'instant, on affiche simplement un message
-        alert('Fonctionnalité de mise à jour à implémenter');
-        
-        // Et on ferme la modale
-        editModal.classList.add('hidden');
     });
     
     // Fermer la modale en cliquant en dehors
+    const editModal = document.getElementById('editUserModal');
     editModal.addEventListener('click', function(e) {
         if (e.target === editModal) {
             editModal.classList.add('hidden');

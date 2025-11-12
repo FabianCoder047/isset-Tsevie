@@ -19,26 +19,83 @@ try {
     error_log("Erreur lors de la récupération des matières: " . $e->getMessage());
 }
 
-// Gestion de l'ajout d'une matière
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajouter_matiere'])) {
-    $nom = trim($_POST['nom']);
-    $classe_id = (int)$_POST['classe_id'];
-    $coefficient = (int)$_POST['coefficient'];
-    
-    if (!empty($nom) && $classe_id > 0 && $coefficient > 0) {
-        try {
-            $query = "INSERT INTO matieres (nom, classe_id, coefficient) VALUES (?, ?, ?)";
-            $stmt = $db->prepare($query);
-            $stmt->execute([$nom, $classe_id, $coefficient]);
-            // Utiliser JavaScript pour la redirection pour éviter les problèmes d'en-têtes
-            echo '<script>window.location.href = "matieres.php?success=1";</script>';
-            exit;
-        } catch (PDOException $e) {
-            error_log("Erreur lors de l'ajout de la matière: " . $e->getMessage());
-            $error = "Une erreur est survenue lors de l'ajout de la matière.";
+// Gestion de l'ajout et de la modification d'une matière
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['ajouter_matiere'])) {
+        $nom = trim($_POST['nom']);
+        $classe_id = (int)$_POST['classe_id'];
+        $coefficient = (int)$_POST['coefficient'];
+        
+        if (!empty($nom) && $classe_id > 0 && $coefficient > 0) {
+            try {
+                // Vérifier si la matière existe déjà pour cette classe
+                $checkQuery = "SELECT id FROM matieres WHERE nom = ? AND classe_id = ?";
+                $checkStmt = $db->prepare($checkQuery);
+                $checkStmt->execute([$nom, $classe_id]);
+                
+                if ($checkStmt->rowCount() > 0) {
+                    $error = "Cette matière existe déjà pour cette classe.";
+                } else {
+                    $query = "INSERT INTO matieres (nom, classe_id, coefficient) VALUES (?, ?, ?)";
+                    $stmt = $db->prepare($query);
+                    $stmt->execute([$nom, $classe_id, $coefficient]);
+                    echo '<script>window.location.href = "matieres.php?success=1";</script>';
+                    exit;
+                }
+            } catch (PDOException $e) {
+                error_log("Erreur lors de l'ajout de la matière: " . $e->getMessage());
+                $error = "Une erreur est survenue lors de l'ajout de la matière.";
+            }
+        } else {
+            $error = "Veuillez remplir tous les champs correctement.";
         }
-    } else {
-        $error = "Veuillez remplir tous les champs correctement.";
+    } 
+    // Gestion de la modification d'une matière
+    elseif (isset($_POST['modifier_matiere'])) {
+        $matiere_id = (int)$_POST['matiere_id'];
+        $nom = trim($_POST['nom']);
+        $coefficient = (int)$_POST['coefficient'];
+        
+        if (!empty($nom) && $matiere_id > 0 && $coefficient > 0) {
+            try {
+                $query = "UPDATE matieres SET nom = ?, coefficient = ? WHERE id = ?";
+                $stmt = $db->prepare($query);
+                $stmt->execute([$nom, $coefficient, $matiere_id]);
+                echo '<script>window.location.href = "matieres.php?success=2";</script>';
+                exit;
+            } catch (PDOException $e) {
+                error_log("Erreur lors de la modification de la matière: " . $e->getMessage());
+                $error = "Une erreur est survenue lors de la modification de la matière.";
+            }
+        } else {
+            $error = "Veuillez remplir tous les champs correctement.";
+        }
+    }
+}
+
+// Gestion de la suppression d'une matière
+if (isset($_GET['supprimer'])) {
+    $matiere_id = (int)$_GET['supprimer'];
+    if ($matiere_id > 0) {
+        try {
+            // Vérifier s'il y a des notes associées à cette matière
+            $checkNotes = $db->prepare("SELECT COUNT(*) FROM notes WHERE matiere_id = ?");
+            $checkNotes->execute([$matiere_id]);
+            $hasNotes = $checkNotes->fetchColumn() > 0;
+            
+            if ($hasNotes) {
+                $error = "Impossible de supprimer cette matière car elle est associée à des notes.";
+            } else {
+                $query = "DELETE FROM matieres WHERE id = ?";
+                $stmt = $db->prepare($query);
+                $stmt->execute([$matiere_id]);
+                echo '<script>window.location.href = "matieres.php?success=3";</script>';
+                exit;
+            }
+        } catch (PDOException $e) {
+            error_log("Erreur lors de la suppression de la matière: " . $e->getMessage());
+            $error = "Une erreur est survenue lors de la suppression de la matière.";
+        }
     }
 }
 ?>
@@ -56,17 +113,80 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajouter_matiere'])) {
     
     <?php if (isset($_GET['success'])): ?>
         <div class="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 mb-4" role="alert">
-            <p>Matière ajoutée avec succès !</p>
+            <p>
+                <?php 
+                switch($_GET['success']) {
+                    case '1':
+                        echo 'Matière ajoutée avec succès !';
+                        break;
+                    case '2':
+                        echo 'Matière modifiée avec succès !';
+                        break;
+                    case '3':
+                        echo 'Matière supprimée avec succès !';
+                        break;
+                    default:
+                        echo 'Opération effectuée avec succès !';
+                }
+                ?>
+            </p>
         </div>
     <?php endif; ?>
     
     <form method="POST" class="space-y-4">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-                <label for="nom" class="block text-sm font-medium text-gray-700">Nom de la matière</label>
-                <input type="text" id="nom" name="nom" required 
-                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                <label for="nom" class="block text-sm font-medium text-gray-700">Sélectionner une matière</label>
+                <select id="nom" name="nom" required
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    <option value="">Sélectionner une matière</option>
+                    <?php 
+                    // Récupérer la liste des matières uniques déjà existantes
+                    $matieres_uniques = [];
+                    foreach ($matieres as $m) {
+                        $matieres_uniques[$m['nom']] = $m['nom'];
+                    }
+                    foreach (array_unique($matieres_uniques) as $matiere_nom): ?>
+                        <option value="<?php echo htmlspecialchars($matiere_nom); ?>">
+                            <?php echo htmlspecialchars($matiere_nom); ?>
+                        </option>
+                    <?php endforeach; ?>
+                    <option value="autre">Autre (préciser)...</option>
+                </select>
+                <div id="autre_matiere_container" class="mt-2 hidden">
+                    <label for="autre_matiere" class="block text-sm font-medium text-gray-700">Nouvelle matière</label>
+                    <input type="text" id="autre_matiere" name="autre_matiere" 
+                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                </div>
             </div>
+            
+            <script>
+            document.getElementById('nom').addEventListener('change', function() {
+                const autreMatiereContainer = document.getElementById('autre_matiere_container');
+                if (this.value === 'autre') {
+                    autreMatiereContainer.classList.remove('hidden');
+                    document.getElementById('autre_matiere').setAttribute('required', 'required');
+                } else {
+                    autreMatiereContainer.classList.add('hidden');
+                    document.getElementById('autre_matiere').removeAttribute('required');
+                }
+            });
+            
+            // Gestion de la soumission du formulaire pour inclure la nouvelle matière si nécessaire
+            document.querySelector('form').addEventListener('submit', function(e) {
+                const selectMatiere = document.getElementById('nom');
+                const autreMatiere = document.getElementById('autre_matiere');
+                
+                if (selectMatiere.value === 'autre' && autreMatiere.value.trim() !== '') {
+                    // Créer une nouvelle option avec la valeur de l'input
+                    const newOption = new Option(autreMatiere.value, autreMatiere.value, true, true);
+                    // Ajouter la nouvelle option avant l'option 'autre'
+                    selectMatiere.insertBefore(newOption, selectMatiere.lastElementChild);
+                    // Sélectionner la nouvelle option
+                    selectMatiere.value = autreMatiere.value;
+                }
+            });
+            </script>
             
             <div>
                 <label for="classe_id" class="block text-sm font-medium text-gray-700">Classe</label>
@@ -140,12 +260,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajouter_matiere'])) {
                                     </span>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                    <button class="text-blue-600 hover:text-blue-900 mr-4">
+                                    <button onclick="openEditModal(
+                                        '<?php echo $matiere['id']; ?>',
+                                        '<?php echo htmlspecialchars(addslashes($matiere['nom']), ENT_QUOTES); ?>',
+                                        <?php echo (int)$matiere['coefficient']; ?>
+                                    ); return false;" class="text-blue-600 hover:text-blue-900 mr-4">
                                         <i class="fas fa-edit"></i> Modifier
                                     </button>
-                                    <button class="text-red-600 hover:text-red-900">
+                                    <a href="?supprimer=<?php echo $matiere['id']; ?>" 
+                                       onclick="return confirm('Êtes-vous sûr de vouloir supprimer cette matière ?');"
+                                       class="text-red-600 hover:text-red-900">
                                         <i class="fas fa-trash"></i> Supprimer
-                                    </button>
+                                    </a>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -170,11 +296,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajouter_matiere'])) {
                     <div class="mt-4">
                         <form id="editMatiereForm" method="POST">
                             <input type="hidden" name="matiere_id" id="edit_matiere_id">
+                            <input type="hidden" name="modifier_matiere" value="1">
                             <div class="space-y-4">
                                 <div>
-                                    <label for="edit_nom" class="block text-sm font-medium text-gray-700">Nom de la matière</label>
-                                    <input type="text" id="edit_nom" name="nom" required 
-                                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                    <label for="edit_nom" class="block text-sm font-medium text-gray-700">Matière</label>
+                                    <select id="edit_nom" name="nom" required
+                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                        <option value="">Sélectionner une matière</option>
+                                        <?php 
+                                        $matieres_uniques = [];
+                                        foreach ($matieres as $m) {
+                                            $matieres_uniques[$m['nom']] = $m['nom'];
+                                        }
+                                        foreach (array_unique($matieres_uniques) as $matiere_nom): 
+                                        ?>
+                                            <option value="<?php echo htmlspecialchars($matiere_nom); ?>">
+                                                <?php echo htmlspecialchars($matiere_nom); ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
                                 </div>
                                 <div>
                                     <label for="edit_coefficient" class="block text-sm font-medium text-gray-700">Coefficient</label>
@@ -183,6 +323,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajouter_matiere'])) {
                                 </div>
                             </div>
                         </form>
+                        <script>
+                        // Aucune manipulation spéciale nécessaire pour la soumission
+                        // La sélection de la matière et la modification du coefficient sont gérées directement par le formulaire
+                        </script>
                     </div>
                 </div>
             </div>
@@ -199,27 +343,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajouter_matiere'])) {
 </div>
 
 <script>
+// Fonction pour ouvrir la modale d'édition avec les données de la matière
+function openEditModal(id, nom, coefficient) {
+    console.log('Ouverture de la modale avec ID:', id, 'Nom:', nom, 'Coefficient:', coefficient);
+    
+    // Mettre à jour les champs du formulaire
+    const form = document.getElementById('editMatiereForm');
+    form.reset(); // Réinitialiser le formulaire
+    
+    // Définir les valeurs des champs
+    document.getElementById('edit_matiere_id').value = id;
+    document.getElementById('edit_nom').value = nom;
+    document.getElementById('edit_coefficient').value = coefficient;
+    
+    // Afficher la modale
+    document.getElementById('editModal').classList.remove('hidden');
+}
+
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM chargé, initialisation des écouteurs d\'événements');
+    
     // Gestion de la modale d'édition
     const editModal = document.getElementById('editModal');
     const editForm = document.getElementById('editMatiereForm');
     const saveChangesBtn = document.getElementById('saveChangesBtn');
     const cancelEditBtn = document.getElementById('cancelEditBtn');
     
-    // Fonction pour ouvrir la modale d'édition
-    function openEditModal(matiere) {
-        document.getElementById('edit_matiere_id').value = matiere.id;
-        document.getElementById('edit_nom').value = matiere.nom;
-        document.getElementById('edit_coefficient').value = matiere.coefficient;
-        editModal.classList.remove('hidden');
+    if (!editModal || !editForm || !saveChangesBtn || !cancelEditBtn) {
+        console.error('Un ou plusieurs éléments de la modale sont introuvables');
+        return;
     }
+    
+    // Fermer la modale lors du clic sur le bouton Annuler
+    cancelEditBtn.addEventListener('click', function() {
+        editModal.classList.add('hidden');
+    });
+    
+    // Fermer la modale lors du clic en dehors du contenu
+    editModal.addEventListener('click', function(e) {
+        if (e.target === editModal) {
+            editModal.classList.add('hidden');
+        }
+    });
+    
+    // Gérer la soumission du formulaire de modification
+    saveChangesBtn.addEventListener('click', function() {
+        editForm.submit();
+    });
     
     // Fonction pour fermer la modale
     function closeEditModal() {
         editModal.classList.add('hidden');
     }
     
-    // Écouteurs d'événements pour les boutons d'édition
+    // Afficher un message de débogage pour les boutons d'édition
+    const editButtons = document.querySelectorAll('button[onclick^="openEditModal"]');
+    console.log('Boutons d\'édition trouvés:', editButtons.length);
     document.querySelectorAll('[data-action="edit"]').forEach(button => {
         button.addEventListener('click', function() {
             const row = this.closest('tr');

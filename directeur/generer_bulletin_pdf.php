@@ -1,22 +1,63 @@
 <?php
-require_once __DIR__ . '/../includes/auth.php';
-require_once __DIR__ . '/../includes/db.php';
+// Charger l'autoloader de Composer
+require_once __DIR__ . '/../vendor/autoload.php';
+
+// Activer l'affichage des erreurs pour le débogage
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+// Activer la journalisation des erreurs
+ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/../logs/pdf_errors.log');
+
+// En-têtes pour le débogage
+header('Content-Type: text/html; charset=utf-8');
+
+// Journaliser le début de l'exécution
+error_log("=== Début de la génération du PDF ===");
 
 // Vérifier les paramètres
 $eleve_id = isset($_GET['eleve_id']) ? (int)$_GET['eleve_id'] : 0;
 $classe_id = isset($_GET['classe_id']) ? (int)$_GET['classe_id'] : 0;
 $periode_id = isset($_GET['periode_id']) ? (int)$_GET['periode_id'] : 0;
+$export_type = $_GET['export'] ?? ''; // 'classe' ou 'selection'
+$eleve_ids = isset($_GET['ids']) ? explode(',', $_GET['ids']) : [];
 
-if ($eleve_id <= 0 || $classe_id <= 0 || $periode_id <= 0) {
+// Vérification des paramètres obligatoires
+if (empty($export_type) && ($eleve_id <= 0 || $classe_id <= 0 || $periode_id <= 0)) {
     $_SESSION['error'] = "Paramètres manquants ou invalides.";
     header('Location: bulletins.php');
     exit;
 }
 
-try {
+// Si c'est une exportation de sélection mais qu'aucun élève n'est sélectionné
+if ($export_type === 'selection' && empty($eleve_ids)) {
+    $_SESSION['error'] = "Aucun élève sélectionné pour l'exportation.";
+    header('Location: bulletins.php');
+    exit;
+}
+
+// Charger les dépendances
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/db.php';
+
+// Journaliser la connexion à la base de données réussie
+error_log("Connexion à la base de données établie avec succès");
+
+/**
+ * Génère les données du bulletin pour un élève
+ */
+function genererBulletinEleve($db, $eleve_id, $classe_id, $periode_id) {
+    // Vérification des paramètres
+    if (empty($eleve_id) || empty($classe_id) || empty($periode_id)) {
+        throw new Exception("Paramètres manquants pour la génération du bulletin.");
+    }
+
     // Récupérer les informations de l'élève
     $stmt = $db->prepare("SELECT * FROM eleves WHERE id = ? AND classe_id = ?");
-    $stmt->execute([$eleve_id, $classe_id]);
+    if (!$stmt->execute([$eleve_id, $classe_id])) {
+        throw new Exception("Erreur lors de la récupération des informations de l'élève.");
+    }
     $eleve = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$eleve) {
@@ -25,24 +66,39 @@ try {
 
     // Récupérer les informations de la classe
     $stmt = $db->prepare("SELECT * FROM classes WHERE id = ?");
-    $stmt->execute([$classe_id]);
+    if (!$stmt->execute([$classe_id])) {
+        throw new Exception("Erreur lors de la récupération des informations de la classe.");
+    }
     $classe = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$classe) {
+        throw new Exception("Classe non trouvée.");
+    }
 
     // Récupérer les informations de la période
     $stmt = $db->prepare("SELECT * FROM periodes WHERE id = ?");
-    $stmt->execute([$periode_id]);
+    if (!$stmt->execute([$periode_id])) {
+        throw new Exception("Erreur lors de la récupération des informations de la période.");
+    }
     $periode = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$periode) {
         throw new Exception("Période non trouvée.");
     }
 
+    // Initialiser les informations de l'école
+    $ecole = [
+        'nom' => 'ISSET Tsévié',
+        'ville' => 'Tsévié',
+        'pays' => 'Togo'
+    ];
+
     // Déterminer le semestre
     $semestre = 1;
     if (preg_match('/2|deuxi[eè]me|second/i', $periode['nom'])) {
         $semestre = 2;
     }
-
+    
     // Récupérer les notes de l'élève pour la période
     $query = "
         SELECT 
@@ -50,13 +106,13 @@ try {
             m.nom as matiere_nom,
             m.coefficient,
             (n.interro1 + n.interro2 + n.devoir + (n.compo * 2)) / 5 as moyenne,
-            a.contenu as appreciation
+            '' as appreciation,  -- Appréciation gérée logiquement
+            COALESCE(u.nom, '') as professeur_nom,
+            COALESCE(u.prenom, '') as professeur_prenom
         FROM notes n
         JOIN matieres m ON n.matiere_id = m.id
-        LEFT JOIN appreciations a ON a.eleve_id = n.eleve_id 
-            AND a.matiere_id = n.matiere_id 
-            AND a.classe_id = n.classe_id 
-            AND a.semestre = n.semestre
+        LEFT JOIN enseignements e ON e.matiere_id = m.id
+        LEFT JOIN utilisateurs u ON e.professeur_id = u.id AND u.role = 'professeur'
         WHERE n.eleve_id = ? 
         AND n.classe_id = ?
         AND n.semestre = ?
@@ -64,7 +120,9 @@ try {
     ";
 
     $stmt = $db->prepare($query);
-    $stmt->execute([$eleve_id, $classe_id, $semestre]);
+    if (!$stmt->execute([$eleve_id, $classe_id, $semestre])) {
+        throw new Exception("Erreur lors de la récupération des notes de l'élève.");
+    }
     $notes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     // Préparer les données pour le template
@@ -78,14 +136,15 @@ try {
         $moyenne = round($moyenne, 2);
         
         $bulletins[$note['matiere_id']] = [
-            'matiere_nom' => $note['matiere_nom'],
+            'matiere_nom' => abrevierMatiere($note['matiere_nom']),
             'coefficient' => $note['coefficient'],
             'interro1' => $note['interro1'],
             'interro2' => $note['interro2'],
             'devoir' => $note['devoir'],
             'compo' => $note['compo'],
             'moyenne' => $moyenne,
-            'appreciation' => $note['appreciation'] ?? ''
+            'appreciation' => $note['appreciation'] ?? '',
+            'professeur' => trim(($note['professeur_nom'] ?? ''))
         ];
 
         if ($moyenne > 0) {
@@ -97,167 +156,426 @@ try {
 
     // Calculer la moyenne générale
     $moyenne_generale = $has_notes ? $moyenne_generale / $total_coeff : 0;
+    $moyenne_generale = round($moyenne_generale, 2);
 
-    // Récupérer l'appréciation générale
-    $appreciation = '';
-    $stmt = $db->prepare("
-        SELECT contenu 
-        FROM appreciations 
-        WHERE eleve_id = ? 
-        AND classe_id = ? 
-        AND matiere_id IS NULL 
-        AND semestre = ?
-    ");
-    $stmt->execute([$eleve_id, $classe_id, $semestre]);
-    $appreciation_data = $stmt->fetch(PDO::FETCH_ASSOC);
-    $appreciation = $appreciation_data ? $appreciation_data['contenu'] : '';
-
-    // Récupérer l'effectif de la classe pour le rang
-    $stmt = $db->prepare("SELECT COUNT(*) as effectif FROM eleves WHERE classe_id = ?");
-    $stmt->execute([$classe_id]);
-    $effectif = $stmt->fetch(PDO::FETCH_ASSOC)['effectif'];
-
-    // Calculer le rang (simplifié)
-    $rang = 'N/A';
+    // Déterminer le rang de l'élève dans la classe (si nécessaire)
+    $rang = 'Non classé';
     if ($has_notes) {
-        $stmt = $db->prepare("
+        $query = "
             SELECT COUNT(*) + 1 as rang
             FROM (
                 SELECT e.id, AVG((n.interro1 + n.interro2 + n.devoir + (n.compo * 2)) / 5) as moyenne
                 FROM eleves e
-                JOIN notes n ON n.eleve_id = e.id
-                WHERE e.classe_id = ? AND n.semestre = ?
+                JOIN notes n ON e.id = n.eleve_id
+                WHERE n.classe_id = ? AND n.semestre = ?
                 GROUP BY e.id
                 HAVING AVG((n.interro1 + n.interro2 + n.devoir + (n.compo * 2)) / 5) > ?
-            ) as t
-        ");
+            ) as classement
+        ";
+        $stmt = $db->prepare($query);
         $stmt->execute([$classe_id, $semestre, $moyenne_generale]);
-        $rang_data = $stmt->fetch(PDO::FETCH_ASSOC);
-        $rang = $rang_data ? $rang_data['rang'] : 1;
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        $rang = $result ? $result['rang'] : '1er';
     }
 
-    // Inclure la bibliothèque TCPDF
-    require_once(__DIR__ . '/../tcpdf/tcpdf.php');
+    // Appréciation générale générée dynamiquement en fonction de la moyenne
+    $appreciation = '';
+    if ($moyenne_generale >= 16) {
+        $appreciation = "Excellente année scolaire avec une très bonne maîtrise des compétences. Félicitations !";
+    } elseif ($moyenne_generale >= 14) {
+        $appreciation = "Très bon travail tout au long de la période. Continue ainsi !";
+    } elseif ($moyenne_generale >= 12) {
+        $appreciation = "Bon travail, quelques efforts supplémentaires seraient bénéfiques.";
+    } elseif ($moyenne_generale >= 10) {
+        $appreciation = "Résultats satisfaisants, mais des progrès sont nécessaires.";
+    } else {
+        $appreciation = "Des efforts importants sont nécessaires pour progresser. Travaillez davantage.";
+    }
 
-    // Créer un nouveau document PDF
-    $pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
+    // Récupérer l'effectif de la classe
+    $stmt = $db->prepare("SELECT COUNT(*) as effectif FROM eleves WHERE classe_id = ?");
+    $stmt->execute([$classe_id]);
+    $effectif = $stmt->fetch(PDO::FETCH_ASSOC)['effectif'];
 
-    // Définir les informations du document
-    $pdf->SetCreator('Système de Gestion Scolaire');
-    $pdf->SetAuthor('Établissement Scolaire');
-    $pdf->SetTitle('Bulletin de notes - ' . $eleve['nom'] . ' ' . $eleve['prenom']);
+    // Retourner les données formatées pour le template
+    return [
+        'eleve' => $eleve,
+        'classe' => $classe,
+        'periode' => $periode,
+        'ecole' => $ecole,
+        'bulletins' => $bulletins,
+        'moyenne_generale' => $moyenne_generale,
+        'rang' => $rang,
+        'appreciation' => $appreciation,
+        'effectif' => $effectif,
+        'semestre' => $semestre
+    ];
+}
+
+/**
+ * Génère le contenu HTML d'un bulletin à partir des données fournies
+ */
+function genererHtmlBulletin($data) {
+    extract($data);
+    ob_start();
+    include __DIR__ . '/templates/bulletin_template.php';
+    return ob_get_clean();
+}
+
+try {
+    // Vérifier si TCPDF est disponible
+    if (!class_exists('TCPDF')) {
+        throw new Exception("La bibliothèque TCPDF n'est pas installée.");
+    }
+
+    // Initialiser TCPDF
+    require_once(dirname(__DIR__) . '/vendor/tecnickcom/tcpdf/tcpdf.php');
+    
+    // Créer une classe personnalisée qui étend TCPDF pour ajouter le filigrane
+    class PDF_With_Watermark extends TCPDF {
+        // Page header
+        public function Header() {
+            // Ajouter le filigrane dans l'en-tête de chaque page
+            $this->AddWatermark();
+        }
+        
+        // Page footer
+        public function Footer() {
+            // Rien dans le footer
+        }
+        
+        // Ajouter le filigrane
+        public function AddWatermark() {
+            // Sauvegarder l'état graphique
+            $this->SetAlpha(0.1);
+            $this->SetFont('helvetica', 'B', 50);
+            $this->SetTextColor(150, 150, 150);
+            
+            // Obtenir les dimensions de la page
+            $pageWidth = $this->getPageWidth();
+            $pageHeight = $this->getPageHeight();
+            
+            // Positionner le filigrane au centre de la page
+            $this->StartTransform();
+            $this->Rotate(45, $pageWidth/2, $pageHeight/2);
+            
+            // Ajouter le texte du filigrane
+            $this->Text(30, $pageHeight/2 - 50, 'ISSET-TSEVIE');
+            $this->Text(30, $pageHeight/2 + 50, 'ISSET-TSEVIE');
+            
+            $this->StopTransform();
+            
+            // Restaurer l'état graphique
+            $this->SetAlpha(1);
+            $this->SetTextColor(0, 0, 0);
+            $this->SetFont('helvetica', '', 10);
+        }
+    }
+    
+    // Fonction pour abréger les noms des matières
+    function abrevierMatiere($matiere) {
+        $abreviations = [
+            'mathématiques' => 'Maths',
+            'physique' => 'Phys',
+            'chimie' => 'Chimie',
+            'français' => 'Fr',
+            'anglais' => 'Angl',
+            'histoire' => 'Hist',
+            'géographie' => 'Géo',
+            'histoire et géographie' => 'Histo & Géo',
+            'sciences' => 'Sciences',
+            'informatique' => 'Info',
+            'sciences physiques' => 'Sc. Phys',
+            'sciences de la vie et de la terre' => 'SVT',
+            'éducation physique et sportive' => 'EPS',
+            'technologie' => 'Techno',
+            'arts plastiques' => 'Arts',
+            'éducation musicale' => 'Musique',
+            'philosophie' => 'Philo',
+            'sciences économiques et sociales' => 'SES',
+            'sciences et technologies du management et de la gestion' => 'STMG',
+            'sciences et technologies de laboratoire' => 'STL',
+            'sciences et technologies de la santé et du social' => 'ST2S',
+            'sciences et technologies de l\'industrie et du développement durable' => 'STI2D',
+            'sciences et technologies de l\'hôtellerie et de la restauration' => 'STHR',
+            'sciences et technologies du design et des arts appliqués' => 'STD2A',
+            'allemand' => 'All'
+        ];
+
+        $matiere = mb_strtolower(trim($matiere));
+        
+        // Vérifier si la matière est dans le tableau des abréviations
+        if (array_key_exists($matiere, $abreviations)) {
+            return $abreviations[$matiere];
+        }
+        
+        // Si non trouvée, retourner la matière telle quelle
+        return $matiere;
+    }
+    
+    // Créer une instance de notre classe personnalisée
+    $pdf = new PDF_With_Watermark('P', 'mm', 'A4', true, 'UTF-8', false);
+    
+    // Configuration du document
+    $pdf->SetCreator('IST-ISSIG');
+    $pdf->SetAuthor('IST-ISSIG');
+    $pdf->SetTitle('Bulletin de notes');
     $pdf->SetSubject('Bulletin de notes');
-
-    // Supprimer le header et le footer par défaut
+    $pdf->SetKeywords('Bulletin, Notes, Évaluation');
+    
+    // Désactiver l'en-tête et le pied de page par défaut
     $pdf->setPrintHeader(false);
     $pdf->setPrintFooter(false);
-
-    // Ajouter une page
-    $pdf->AddPage();
-
-    // Définir la police
+    
+    // Définir les marges (gauche, haut, droite)
+    $pdf->SetMargins(15, 15, 15);
+    $pdf->SetHeaderMargin(10);
+    $pdf->SetFooterMargin(10);
+    
+    // Activer le saut de page automatique
+    $pdf->SetAutoPageBreak(true, 25);
+    
+    // Définir le facteur d'échelle pour les images
+    $pdf->setImageScale(1.25);
+    
+    // Police par défaut
     $pdf->SetFont('helvetica', '', 10);
-
-    // En-tête du bulletin
-    $header = '\n\n';
-    $header .= '<h1 style="text-align:center;font-size:16px;font-weight:bold;">BULLETIN DE NOTES</h1>';
-    $header .= '<p style="text-align:center;font-size:12px;">' . htmlspecialchars($classe['niveau'] . ' ' . $classe['nom']) . ' - ' . htmlspecialchars($periode['nom']) . '</p>';
-    $header .= '<p style="text-align:center;font-size:12px;">Année Scolaire ' . htmlspecialchars($periode['annee_scolaire']) . '</p>';
-    $pdf->writeHTML($header, true, false, true, false, '');
-
-    // Informations de l'élève
-    $info_eleve = '\n';
-    $info_eleve .= '<table cellspacing="0" cellpadding="5" border="0">';
-    $info_eleve .= '<tr><td width="50%" style="font-weight:bold;">Nom et prénom :</td><td>' . htmlspecialchars($eleve['nom'] . ' ' . $eleve['prenom']) . '</td></tr>';
-    $info_eleve .= '<tr><td style="font-weight:bold;">Date de naissance :</td><td>' . (!empty($eleve['date_naissance']) ? date('d/m/Y', strtotime($eleve['date_naissance'])) : '-') . '</td></tr>';
-    $info_eleve .= '<tr><td style="font-weight:bold;">Classe :</td><td>' . htmlspecialchars($classe['niveau'] . ' ' . $classe['nom']) . '</td></tr>';
-    $info_eleve .= '<tr><td style="font-weight:bold;">Effectif :</td><td>' . $effectif . ' élèves</td></tr>';
-    $info_eleve .= '</table>';
-    $pdf->writeHTML($info_eleve, true, false, true, false, '');
-
-    // Tableau des notes
-    $tbl = '\n\n';
-    $tbl .= '<table border="1" cellpadding="4">';
-    $tbl .= '<thead><tr style="background-color:#f2f2f2;font-weight:bold;text-align:center;">
-                <th width="30%">Matières</th>
-                <th width="7%">Coef</th>
-                <th width="7%">I1</th>
-                <th width="7%">I2</th>
-                <th width="10%">Devoir</th>
-                <th width="10%">Compo</th>
-                <th width="10%">Moyenne</th>
-                <th>Appréciation</th>
-            </tr></thead><tbody>';
-
-    foreach ($bulletins as $matiere) {
-        $tbl .= '<tr>';
-        $tbl .= '<td>' . htmlspecialchars($matiere['matiere_nom']) . '</td>';
-        $tbl .= '<td style="text-align:center;">' . $matiere['coefficient'] . '</td>';
-        $tbl .= '<td style="text-align:center;">' . ($matiere['interro1'] ?? '-') . '</td>';
-        $tbl .= '<td style="text-align:center;">' . ($matiere['interro2'] ?? '-') . '</td>';
-        $tbl .= '<td style="text-align:center;">' . ($matiere['devoir'] ?? '-') . '</td>';
-        $tbl .= '<td style="text-align:center;">' . ($matiere['compo'] ?? '-') . '</td>';
-        $tbl .= '<td style="text-align:center;font-weight:bold;' . (($matiere['moyenne'] ?? 0) >= 10 ? 'color:green;' : 'color:red;') . '">' . ($matiere['moyenne'] ?? '-') . '</td>';
-        $tbl .= '<td style="font-size:9px;">' . nl2br(htmlspecialchars($matiere['appreciation'] ?? '')) . '</td>';
-        $tbl .= '</tr>';
+    
+    // Activer les sous-ensemble de polices
+    $pdf->setFontSubsetting(true);
+    
+    // Déterminer si on exporte un seul élève ou plusieurs
+    if (!empty($export_type)) {
+        // Exporter plusieurs bulletins (classe entière ou sélection)
+        if ($export_type === 'classe') {
+            // Récupérer tous les élèves de la classe avec leurs noms pour le nom de fichier
+            $stmt = $db->prepare("SELECT id, CONCAT(nom, '_', prenom) as nom_fichier FROM eleves WHERE classe_id = ? ORDER BY nom, prenom");
+            if (!$stmt->execute([$classe_id])) {
+                throw new Exception("Erreur lors de la récupération des élèves de la classe.");
+            }
+            $eleves = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            if (empty($eleves)) {
+                throw new Exception("Aucun élève trouvé dans cette classe.");
+            }
+            
+            // Créer un tableau d'IDs pour la compatibilité avec le code existant
+            $eleve_ids = array_column($eleves, 'id');
+            
+        } elseif ($export_type === 'selection' && empty($eleve_ids)) {
+            throw new Exception("Aucun élève sélectionné pour l'exportation.");
+        }
+        
+        // Générer un bulletin pour chaque élève
+        $count = 0;
+        $generated_files = [];
+        
+        // Si on a des noms d'élèves, on les utilise pour le nom de fichier
+        $has_eleve_names = isset($eleves) && !empty($eleves);
+        
+        foreach ($eleve_ids as $index => $current_eleve_id) {
+            try {
+                $data = genererBulletinEleve($db, $current_eleve_id, $classe_id, $periode_id);
+                $html = genererHtmlBulletin($data);
+                
+                // Créer un nouveau PDF pour chaque élève
+                $student_pdf = new PDF_With_Watermark('P', 'mm', 'A4', true, 'UTF-8', false);
+                
+                // Configuration du document pour ce PDF
+                $student_pdf->SetCreator('ISSET');
+                $student_pdf->SetAuthor('ISSET');
+                $student_pdf->SetTitle('Bulletin de notes');
+                
+                // Ajouter la première page
+                $student_pdf->AddPage();
+                
+                // Ajouter des styles CSS spécifiques pour le PDF
+                $css = '
+                <style>
+                    body { font-family: helvetica; font-size: 10pt; }
+                    .table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+                    .table th, .table td { border: 1px solid #000; padding: 4px; text-align: center; }
+                    .table th { background-color: #f0f0f0; font-weight: bold; }
+                    .text-center { text-align: center; }
+                    .text-right { text-align: right; }
+                    .text-bold { font-weight: bold; }
+                    .signature-line { border-top: 1px solid #000; width: 150px; margin: 30px auto 0; padding-top: 5px; }
+                    .header-logo { max-width: 80px; height: auto; }
+                    .header-sceau { max-width: 70px; height: auto; }
+                </style>';
+                
+                // Écrire le contenu HTML avec les styles
+                $student_pdf->writeHTML($css . $html, true, false, true, false, '');
+                
+                // Générer un nom de fichier unique pour cet élève
+                $filename = '';
+                if ($has_eleve_names) {
+                    $eleve_nom = $eleves[$index]['nom_fichier'];
+                    $filename = 'Bulletin_' . $eleve_nom . '_' . date('Y-m-d') . '.pdf';
+                } else {
+                    $filename = 'Bulletin_eleve_' . $current_eleve_id . '_' . date('Y-m-d') . '.pdf';
+                }
+                
+                // Nettoyer le nom du fichier
+                $filename = preg_replace('/[^a-zA-Z0-9_\-\.]/', '_', $filename);
+                
+                // Sauvegarder le PDF dans un fichier temporaire
+                $temp_file = sys_get_temp_dir() . '/' . uniqid('bulletin_', true) . '.pdf';
+                $student_pdf->Output($temp_file, 'F');
+                
+                // Ajouter le fichier à la liste des fichiers générés
+                $generated_files[] = [
+                    'path' => $temp_file,
+                    'name' => $filename
+                ];
+                
+                $count++;
+                
+            } catch (Exception $e) {
+                // Enregistrer l'erreur mais continuer avec les autres élèves
+                error_log("Erreur lors de la génération du bulletin pour l'élève $current_eleve_id: " . $e->getMessage());
+                continue;
+            }
+        }
+        
+        if ($count === 0) {
+            throw new Exception("Aucun bulletin n'a pu être généré.");
+        }
+        
+        // Si on a généré un seul fichier, le renvoyer directement
+        if (count($generated_files) === 1) {
+            $file = $generated_files[0];
+            header('Content-Type: application/pdf');
+            header('Content-Disposition: attachment; filename="' . $file['name'] . '"');
+            readfile($file['path']);
+            unlink($file['path']); // Supprimer le fichier temporaire
+            exit;
+        } 
+        // Si on a plusieurs fichiers, créer une archive ZIP
+        else if (count($generated_files) > 1) {
+            $zip = new ZipArchive();
+            $zip_name = 'Bulletins_Classe_' . $classe_id . '_' . date('Y-m-d') . '.zip';
+            $zip_path = sys_get_temp_dir() . '/' . uniqid('bulletins_', true) . '.zip';
+            
+            if ($zip->open($zip_path, ZipArchive::CREATE) === TRUE) {
+                foreach ($generated_files as $file) {
+                    $zip->addFile($file['path'], $file['name']);
+                }
+                $zip->close();
+                
+                // Envoyer le fichier ZIP en tant que réponse binaire
+                header('Content-Type: application/octet-stream');
+                header('Content-Disposition: attachment; filename="' . $zip_name . '"');
+                header('Content-Length: ' . filesize($zip_path));
+                header('Content-Transfer-Encoding: binary');
+                
+                // Lire et envoyer le fichier par morceaux pour éviter les problèmes de mémoire
+                $handle = fopen($zip_path, 'rb');
+                while (!feof($handle)) {
+                    echo fread($handle, 8192);
+                    ob_flush();
+                    flush();
+                }
+                fclose($handle);
+                
+                // Supprimer les fichiers temporaires
+                unlink($zip_path);
+                foreach ($generated_files as $file) {
+                    if (file_exists($file['path'])) {
+                        @unlink($file['path']);
+                    }
+                }
+                exit;
+            } else {
+                throw new Exception("Impossible de créer l'archive ZIP des bulletins.");
+            }
+        }
+        
+    } else {
+        // Exporter un seul élève
+        $data = genererBulletinEleve($db, $eleve_id, $classe_id, $periode_id);
+        $html = genererHtmlBulletin($data);
+        
+        // Le filigrane sera ajouté automatiquement via la méthode Header()
+        $pdf->AddPage();
+        
+        // Générer le contenu du bulletin
+        $pdf->writeHTML($html, true, false, true, false, '');
     }
-
-    $tbl .= '</tbody></table>';
-    $pdf->writeHTML($tbl, true, false, false, false, '');
-
-    // Résultats et appréciation
-    $results = '\n\n';
-    $results .= '<table cellspacing="0" cellpadding="5" border="0">';
-    $results .= '<tr>';
-    $results .= '<td width="50%" valign="top">';
-    $results .= '<h4 style="font-weight:bold;">Résultats</h4>';
-    $results .= '<p>Moyenne générale : <span style="font-weight:bold;' . ($moyenne_generale >= 10 ? 'color:green;' : 'color:red;') . '">' . number_format($moyenne_generale, 2, ',', ' ') . ' / 20</span></p>';
-    $results .= '<p>Rang : ' . $rang . ' / ' . $effectif . '</p>';
-    $results .= '</td>';
-    $results .= '<td width="50%" valign="top">';
-    $results .= '<h4 style="font-weight:bold;">Appréciation générale</h4>';
-    $results .= '<p>' . nl2br(htmlspecialchars($appreciation ?: 'Aucune appréciation')) . '</p>';
-    $results .= '</td>';
-    $results .= '</tr>';
-    $results .= '</table>';
-    $pdf->writeHTML($results, true, false, true, false, '');
-
-    // Signature
-    $signature = '\n\n\n\n\n\n';
-    $signature .= '<table cellspacing="0" cellpadding="5" border="0">';
-    $signature .= '<tr>';
-    $signature .= '<td width="50%" style="text-align:center;">Le Directeur</td>';
-    $signature .= '<td width="50%" style="text-align:center;">Le Professeur Principal</td>';
-    $signature .= '</tr>';
-    $signature .= '<tr>';
-    $signature .= '<td style="text-align:center;">
-                      <div style="margin-top:40px;">
-                          <div style="border-top:1px solid #000;width:150px;margin:0 auto;"></div>
-                      </div>
-                   </td>';
-    $signature .= '<td style="text-align:center;">
-                      <div style="margin-top:40px;">
-                          <div style="border-top:1px solid #000;width:150px;margin:0 auto;"></div>
-                      </div>
-                   </td>';
-    $signature .= '</tr>';
-    $signature .= '<tr>';
-    $signature .= '<td colspan="2" style="text-align:center;font-size:10px;padding-top:20px;">
-                      Fait à [Ville], le ' . date('d/m/Y') . '
-                   </td>';
-    $signature .= '</tr>';
-    $signature .= '</table>';
-    $pdf->writeHTML($signature, true, false, true, false, '');
-
-    // Nom du fichier PDF
-    $filename = 'Bulletin_' . $eleve['nom'] . '_' . $eleve['prenom'] . '_' . str_replace(' ', '_', $periode['nom']) . '.pdf';
-
-    // Télécharger le PDF
-    $pdf->Output($filename, 'D');
+    
+    // Générer un nom de fichier approprié avec le nom de l'élève
+    if (!empty($export_type) && $export_type === 'classe') {
+        // Pour l'export de la classe, utiliser un nom générique
+        $classe_nom = '';
+        $stmt = $db->prepare("SELECT CONCAT(niveau, ' ', nom) as nom_classe FROM classes WHERE id = ?");
+        if ($stmt->execute([$classe_id])) {
+            $classe = $stmt->fetch(PDO::FETCH_ASSOC);
+            $classe_nom = $classe ? $classe['nom_classe'] : 'classe_' . $classe_id;
+        }
+        $filename = 'Bulletins_' . str_replace(' ', '_', $classe_nom) . '_' . date('Y-m-d') . '.pdf';
+    } else {
+        // Pour un seul élève, inclure son nom dans le fichier
+        $eleve_nom = '';
+        $stmt = $db->prepare("SELECT CONCAT(nom, ' ', prenom) as nom_complet FROM eleves WHERE id = ?");
+        if ($stmt->execute([$eleve_id])) {
+            $eleve = $stmt->fetch(PDO::FETCH_ASSOC);
+            $eleve_nom = $eleve ? $eleve['nom_complet'] : 'eleve_' . $eleve_id;
+        }
+        $filename = 'Bulletin_' . str_replace(' ', '_', $eleve_nom) . '_' . date('Y-m-d') . '.pdf';
+    }
+    
+    // Utiliser le nom de fichier fourni ou en générer un
+    $filename = isset($_POST['filename']) ? $_POST['filename'] : 'bulletins.pdf';
+    $filename = preg_replace('/[^a-zA-Z0-9_\-\.]/', '_', $filename);
+    
+    // Désactiver la mise en cache
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Cache-Control: post-check=0, pre-check=0', false);
+    header('Pragma: no-cache');
+    header('Expires: 0');
+    
+    // Forcer le téléchargement avec le bon type MIME
+    header('Content-Type: application/force-download');
+    header('Content-Type: application/octet-stream', false);
+    header('Content-Type: application/download', false);
+    header('Content-Type: application/pdf', false);
+    
+    // Définir les en-têtes pour le téléchargement
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    header('Content-Transfer-Encoding: binary');
+    
+    // Si c'est une requête POST, on force le téléchargement
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['force_download'])) {
+        // Envoyer le contenu du PDF directement
+        $pdf->Output($filename, 'D');
+    } else {
+        // Pour les requêtes GET, afficher dans le navigateur
+        $pdf->Output($filename, 'I');
+    }
+    exit;
 
 } catch (Exception $e) {
-    $_SESSION['error'] = "Erreur lors de la génération du PDF : " . $e->getMessage();
-    header('Location: bulletins.php');
+    // Journaliser l'erreur
+    $errorMessage = "Erreur lors de la génération du PDF : " . $e->getMessage() . "\n" . $e->getTraceAsString();
+    error_log($errorMessage);
+    
+    // Si c'est une requête AJAX, renvoyer une réponse JSON
+    if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'message' => $errorMessage]);
+    } else {
+        // Afficher l'erreur directement pour le débogage
+        echo "<h1>Erreur lors de la génération du PDF</h1>";
+        echo "<pre>" . htmlspecialchars($errorMessage) . "</pre>";
+        echo "<p>Veuillez vérifier les logs pour plus de détails.</p>";
+        
+        // Si la session est disponible, enregistrer également l'erreur
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            $_SESSION['error'] = $errorMessage;
+        }
+    }
     exit;
 }
-?>
+
+// Journaliser la fin de l'exécution
+error_log("=== Fin de la génération du PDF ===\n");

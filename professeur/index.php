@@ -5,6 +5,7 @@ require_once 'includes/header.php';
 $query = "SELECT DISTINCT m.id as matiere_id, 
           m.nom as matiere_nom, 
           c.nom as classe_nom,
+          c.niveau as classe_niveau,
           c.id as classe_id,
           m.coefficient
           FROM enseignements e
@@ -49,7 +50,8 @@ $matieres = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         }
                         $matieres_grouped[$matiere_id]['classes'][] = [
                             'id' => $matiere['classe_id'],
-                            'nom' => $matiere['classe_nom']
+                            'nom' => $matiere['classe_nom'],
+                            'niveau' => $matiere['classe_niveau']
                         ];
                     }
                     
@@ -64,7 +66,7 @@ $matieres = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                     <div class="ml-2 flex-shrink-0 flex flex-wrap gap-1">
                                         <?php foreach ($matiere['classes'] as $classe): ?>
                                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                                                <?php echo htmlspecialchars($classe['nom']); ?>
+                                                <?php echo htmlspecialchars($classe['nom'] . ' ' . $classe['niveau']); ?>
                                             </span>
                                         <?php endforeach; ?>
                                     </div>
@@ -75,7 +77,7 @@ $matieres = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                             <i class="fas fa-graduation-cap mr-1"></i>
                                             <?php 
                                             $classes_list = array_map(function($c) { 
-                                                return $c['nom']; 
+                                                return $c['nom'] . ' ' . $c['niveau']; 
                                             }, $matiere['classes']);
                                             echo htmlspecialchars(implode(', ', $classes_list));
                                             ?>

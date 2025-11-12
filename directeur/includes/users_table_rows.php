@@ -63,7 +63,7 @@ function generateUsersTableRows($db) {
             $html .= '<i class="fas fa-edit"></i> Modifier';
             $html .= '</button>';
             $html .= '<button class="text-red-600 hover:text-red-900" ';
-            $html .= 'onclick="deleteUser(' . ($utilisateur['id'] ?? '0') . ', ';
+            $html .= 'onclick="confirmDelete(' . ($utilisateur['id'] ?? '0') . ', ';
             $html .= '\'' . addslashes(($utilisateur['prenom'] ?? '') . ' ' . ($utilisateur['nom'] ?? '')) . '\')">';
             $html .= '<i class="fas fa-trash"></i> Supprimer';
             $html .= '</button>';

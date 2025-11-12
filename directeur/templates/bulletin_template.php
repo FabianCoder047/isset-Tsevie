@@ -1,187 +1,258 @@
 <?php
 /**
- * Template pour l'affichage et l'impression des bulletins
- * 
- * Variables attendues :
- * - $eleve : Tableau avec les informations de l'élève
- * - $classe : Tableau avec les informations de la classe
- * - $periode : Tableau avec les informations de la période
- * - $bulletins : Tableau des notes par matière
- * - $moyenne_generale : Moyenne générale de l'élève
- * - $appreciation : Appréciation générale
+ * Template bulletin corrigé :
+ * Bandeau bleu plus fin, logo à gauche, sceau à droite, texte centré.
  */
 ?>
 <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bulletin de notes - <?php echo htmlspecialchars($eleve['nom'] . ' ' . $eleve['prenom']); ?></title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
-        @media print {
-            body { font-size: 12px; }
-            .no-print { display: none !important; }
-            .page-break { page-break-after: always; }
-            .header, .footer { position: fixed; }
-            .header { top: 0; }
-            .footer { bottom: 0; }
-            .content { margin-top: 100px; margin-bottom: 50px; }
+        body {
+            font-family: helvetica, sans-serif;
+            font-size: 10pt;
+            color: #000;
+            margin: 0;
         }
-        .border-black { border: 1px solid #000; }
+
+        /* --- HEADER --- */
+        .header {
+            background-color: #003399;
+            color: white;
+            text-align: center;
+            padding: 12px 20px 18px; /* Hauteur réduite */
+            position: relative;
+        }
+
+        /* Logo gauche et sceau droite */
+        .header .logo-left {
+            position: absolute;
+            left: 20px;
+            top: 10px;
+            height: 80px;
+            float: left;
+        }
+
+        .header .logo-right {
+            position: absolute;
+            right: 20px;
+            top: 10px;
+            height: 80px;
+            float: right;
+        }
+
+        .header h2 {
+            margin: 0;
+            font-size: 13pt;
+            font-weight: bold;
+        }
+        .header p {
+            margin: 2px 0;
+            font-size: 10pt;
+        }
+        .header h3 {
+            margin: 5px 0 0;
+            font-size: 11pt;
+            font-weight: bold;
+            letter-spacing: 0.3px;
+        }
+
+        /* --- Infos Élève --- */
+        .info-eleve {
+            width: 100%;
+            font-size: 10pt;
+            text-align : center;
+        }
+        .info-eleve td {
+            padding: 3px 6px;
+        }
+        .info-eleve strong {
+            color: #003399;
+        }
+
+        /* --- Tableau Notes --- */
+        table.notes {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 9pt;
+        }
+        table.notes th, table.notes td {
+            border: 1px solid #000;
+            padding: 5px;
+            text-align: center;
+        }
+        table.notes th {
+            background-color: #e9e9e9;
+        }
+
+        /* --- Résultats --- */
+        .resultats {
+            margin-top: 15px;
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .resultats td {
+            border: 1px solid #000;
+            padding: 5px;
+            font-size: 10pt;
+        }
+
+        /* --- Appréciation --- */
+        .appreciation {
+            margin-top: 15px;
+            border: 1px solid #000;
+            padding: 8px;
+            background-color: #f9f9f9;
+        }
+
+        /* --- Signatures --- */
+        .signatures {
+            margin-top: 30px;
+            width: 100%;
+            font-size: 10pt;
+        }
+        .signatures td {
+            text-align: center;
+            padding-top: 40px;
+        }
+
+        /* --- Pied de page --- */
+        .footer {
+            margin-top: 10px;
+            text-align: center;
+            font-size: 9pt;
+        }
     </style>
 </head>
-<body class="bg-gray-100 p-4 md:p-8">
-    <div class="max-w-4xl mx-auto bg-white rounded-lg shadow-lg overflow-hidden">
-        <!-- En-tête -->
-        <div class="bg-blue-800 text-white p-6">
-            <div class="flex justify-between items-start mb-4">
-                <div class="w-1/4 text-center">
-                    <img src="../images/logo.jpeg" alt="Logo" class="h-20 mx-auto">
-                    <p class="text-xs mt-2"><?php echo htmlspecialchars($ecole['nom']); ?></p>
-                </div>
-                <div class="w-2/4 text-center">
-                    <h1 class="text-2xl font-bold">REPUBLIQUE TOGOLAISE</h1>
-                    <p class="text-lg">Ministère de l'Éducation et de la Recherche Supérieure</p>
-                    <h2 class="text-xl font-bold mt-2">BULLETIN DE NOTES</h2>
-                    <p class="text-sm"><?php echo htmlspecialchars($classe['nom'] . ' ' . $classe['niveau']); ?></p>
-                    <p class="text-sm"><?php echo htmlspecialchars($periode['nom']); ?> - Année Scolaire <?php echo htmlspecialchars($periode['annee_scolaire']); ?></p>
-                </div>
-                <div class="w-1/4 text-center">
-                    <img src="../images/sceau.png" alt="Sceau de l'Etat" class="h-20 mx-auto">
-                    <p class="text-xs mt-2"><?php echo htmlspecialchars($ecole['ville'] . ' - ' . $ecole['pays']); ?></p>
-                </div>
-            </div>
-        </div>
+<body>
 
-        <!-- Informations élève -->
-        <div class="p-6 border-b border-gray-200">
-            <div class="grid grid-cols-2 gap-4">
-                <div>
-                    <p><span class="font-semibold">Nom et prénom :</span> <?php echo htmlspecialchars($eleve['nom'] . ' ' . $eleve['prenom']); ?></p>
-                    <p><span class="font-semibold">Date de naissance :</span> <?php echo !empty($eleve['date_naissance']) ? date('d/m/Y', strtotime($eleve['date_naissance'])) : '-'; ?></p>
-                </div>
-                <div>
-                    <p><span class="font-medium">Lieu de naissance :</span> <?php echo htmlspecialchars($eleve['lieu_naissance'] ?? 'Non défini'); ?></p>
-                    <p><span class="font-semibold">Effectif de la classe :</span> <?php echo isset($effectif) ? $effectif : '-'; ?></p>
-                </div>
-            </div>
-        </div>
+    <!-- Header -->
+    <table style="width: 100%; border-collapse: collapse; border-bottom: 2px solid #000; padding-bottom: 2px;">
+        <tr>
+            <!-- Logo à gauche -->
+            <td style="width: 20%; vertical-align: top; text-align: left; padding: 10px 0;">
+                <img src="C:\\wamp64\\www\\isset\\images\\logo.jpeg" alt="Logo" style="width: 80px; height: auto;">
+            </td>
+            
+            <!-- Texte au centre -->
+            <td style="vertical-align: top; text-align: center; width: 60%;">
+                <p style="font-size: 14px; line-height: 1.2; font-weight: 500;">
+                    Ministère de l'Enseignement Technique de la Formation Professionnelle et de l'Industrie
+                </p>
 
-        <!-- Notes -->
-        <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
-                    <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Matières</th>
-                        <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Coef</th>
-                        <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">I1</th>
-                        <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">I2</th>
-                        <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Devoir</th>
-                        <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Compo</th>
-                        <th class="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Moyenne</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Appréciation</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Professeur</th>
-                    </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                    <?php foreach ($bulletins as $matiere_id => $note): ?>
+                <h3 style="font-size: 16px; line-height: 1.2; text-transform: uppercase;">
+                    BULLETIN DE NOTES DU <?= htmlspecialchars($periode['nom']) ?>
+                </h3>
+                <strong style="font-size: 13px; line-height: 1.3; text-transform: uppercase;">
+                    Année scolaire <?= date('Y') ?>-<?= date('Y') + 1 ?>
+                </strong>
+            </td>
+            
+            <!-- Sceau à droite -->
+            <td style="width: 20%; vertical-align: top; text-align: right; padding: 10px 0;">
+                <img src="C:\\wamp64\\www\\isset\\images\\sceau.png" alt="Sceau" style="width: 80px; height: auto; margin-left: auto;">
+            </td>
+        </tr>
+    </table>
+
+    <!-- Informations élève -->
+    <div style="margin: 0; padding: 0;">
+    <table class="info-eleve">
+        <tr>
+            <td style="padding: 5px; margin: 0;"><strong>Nom :</strong> <?= htmlspecialchars($eleve['nom']) ?></td>
+            <td style="padding: 5px; margin: 0;"><strong>Prénom :</strong> <?= htmlspecialchars($eleve['prenom']) ?></td>
+            <td style="padding: 5px; margin: 0;"><strong>Classe :</strong> <?= htmlspecialchars($classe['nom'].' '.$classe['niveau']) ?></td>
+        </tr>
+        <tr>
+            <td style="padding: 5px; margin: 0;"><strong>Lieu de naissance :</strong> <?= htmlspecialchars($eleve['lieu_naissance'] ?? '') ?></td>
+            <td style="padding: 5px; margin: 0;"><strong>Date de naissance :</strong> <?php 
+                if (!empty($eleve['date_naissance'])) {
+                    $date = date_create_from_format('Y-m-d', $eleve['date_naissance']);
+                    echo $date ? date_format($date, 'd/m/Y') : htmlspecialchars($eleve['date_naissance']);
+                } else {
+                    echo '';
+                }
+            ?></td>
+            <td style="padding: 5px; margin: 0;"><strong>Effectif de la classe :</strong> <?= htmlspecialchars($effectif) ?></td>
+        </tr>
+    </table>
+    </div>
+
+    <!-- Tableau des notes -->
+    <div style="margin: 0; padding: 0;">
+        <table class="notes" style="width: 100%; border-collapse: collapse; border: none;">
+            <thead style="background-color: #f2f2f2; font-weight: bold; border-top: 2px solid #000;">
+                <tr>
+                    <th style="text-align: center;font-weight:bold">Matières</th>
+                    <th style="text-align: center;font-weight:bold">Coef</th>
+                    <th style="text-align: center;font-weight:bold">Int 1</th>
+                    <th style="text-align: center;font-weight:bold">Int 2</th>
+                    <th style="text-align: center;font-weight:bold">Devoir</th>
+                    <th style="text-align: center;font-weight:bold" >Compo</th>
+                    <th style="text-align: center;font-weight:bold" >Moyenne</th >
+                    <th style="text-align: center;font-weight:bold" >Prof</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php if (!empty($bulletins)): ?>
+                    <?php foreach ($bulletins as $b): ?>
                         <tr>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                <?php echo htmlspecialchars($note['matiere_nom']); ?>
-                            </td>
-                            <td class="px-2 py-4 whitespace-nowrap text-sm text-center text-gray-500">
-                                <?php echo $note['coefficient']; ?>
-                            </td>
-                            <td class="px-2 py-4 whitespace-nowrap text-sm text-center">
-                                <?php echo $note['interro1'] ?? '-'; ?>
-                            </td>
-                            <td class="px-2 py-4 whitespace-nowrap text-sm text-center">
-                                <?php echo $note['interro2'] ?? '-'; ?>
-                            </td>
-                            <td class="px-2 py-4 whitespace-nowrap text-sm text-center">
-                                <?php echo $note['devoir'] ?? '-'; ?>
-                            </td>
-                            <td class="px-2 py-4 whitespace-nowrap text-sm text-center">
-                                <?php echo $note['compo'] ?? '-'; ?>
-                            </td>
-                            <td class="px-2 py-4 whitespace-nowrap text-sm text-center font-semibold <?php echo ($note['moyenne'] ?? 0) >= 10 ? 'text-green-600' : 'text-red-600'; ?>">
-                                <?php echo isset($note['moyenne']) ? number_format((float)$note['moyenne'], 2, ',', ' ') : '-'; ?>
-                            </td>
-                            <td class="px-6 py-4 text-sm text-gray-500">
-                                <?php if (!empty($note['appreciation'])): ?>
-                                <div class="text-sm italic">
-                                    <?php echo htmlspecialchars($note['appreciation']); ?>
-                                </div>
-                                <?php endif; ?>
-                            </td>
-                            <td class="px-6 py-4 text-sm text-gray-500">
-                                <?php echo htmlspecialchars($note['professeur'] ?? 'Non attribué'); ?>
-                            </td>
+                            <td><?= htmlspecialchars($b['matiere_nom']) ?></td>
+                            <td><?= htmlspecialchars($b['coefficient']) ?></td>
+                            <td><?= htmlspecialchars($b['interro1']) ?></td>
+                            <td><?= htmlspecialchars($b['interro2']) ?></td>
+                            <td><?= htmlspecialchars($b['devoir']) ?></td>
+                            <td><?= htmlspecialchars($b['compo']) ?></td>
+                            <td><strong><?= htmlspecialchars($b['moyenne']) ?></strong></td>
+                            <td><?= htmlspecialchars($b['professeur']) ?></td>
                         </tr>
                     <?php endforeach; ?>
-                </tbody>
-            </table>
-        </div>
+                <?php else: ?>
+                    <tr><td colspan="8">Aucune note enregistrée.</td></tr>
+                <?php endif; ?>
+            </tbody>
+        </table>
 
         <!-- Résultats -->
-        <div class="p-6 bg-gray-50 border-t border-gray-200">
-            <div class="grid grid-cols-2 gap-4">
-                <div>
-                    <h3 class="text-lg font-semibold mb-2">Résultats</h3>
-                    <p><span class="font-medium">Moyenne Générale :</span> <?php echo number_format((float)$moyenne_generale, 2, ',', ' '); ?>/20 
-                        <?php if (!empty($appreciation_generale)): ?>
-                            <span class="italic">(<?php echo htmlspecialchars($appreciation_generale); ?>)</span>
-                        <?php endif; ?>
-                    </p>
-                    <p><span class="font-medium">Rang :</span> 
-                        <?php if (isset($rang) && $rang !== 'N/A'): ?>
-                            <?php 
-                                $rang_num = (int)$rang;
-                                $suffixe = ($rang_num === 1) ? 'er' : 'e';
-                                echo $rang_num . '<sup>' . $suffixe . '</sup>';
-                            ?> sur <?php echo $effectif; ?> élève(s)
-                        <?php else: ?>
-                            -
-                        <?php endif; ?>
-                    </p>
-                </div>
-                <div>
-                    <h3 class="text-lg font-semibold mb-2">Appréciation générale</h3>
-                    <p class="italic"><?php echo nl2br(htmlspecialchars($appreciation_generale ?? 'Aucune appréciation')); ?></p>
-                </div>
-            </div>
-        </div>
-
-        <!-- Pied de page -->
-        <div class="bg-gray-100 p-4 text-center text-sm text-gray-600 border-t border-gray-200">
-            <div class="flex justify-between">
-                <div class="text-left">
-                    <p>Le Directeur</p>
-                    <div class="mt-8">
-                        <p class="border-t border-black w-32 mt-2"></p>
-                    </div>
-                </div>
-                <div class="text-right">
-                    <p>Fait à Tsévié, le <?php echo date('d/m/Y'); ?></p>
-                    <p>Titulaire de classe</p>
-                    <div class="mt-8">
-                        <p class="border-t border-black w-32 ml-auto mt-2"></p>
-                    </div>
-                </div>
-            </div>
+        <div style="margin: 20px 0;">
+            <table class="resultats">
+                <tr>
+                    <td style="text-align: center;"><strong>Moyenne Générale : <?= htmlspecialchars($moyenne_generale) ?>/20</strong></td>
+                    <td style="text-align: center;"><strong>Rang : <?php if ($rang == '1') { echo $rang.'<sup>er</sup>'; } else { echo $rang.'<sup>ème</sup>'; } ?></strong></td>
+                </tr>
+            </table>
         </div>
     </div>
-
-    <!-- Boutons d'action -->
-    <div class="mt-6 flex justify-center space-x-4 no-print">
-        <a href="generer_pdf.php?eleve_id=<?php echo $eleve_id; ?>&classe_id=<?php echo $classe_id; ?>&periode_id=<?php echo $periode_id; ?>" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-            <i class="fas fa-file-pdf mr-2"></i> Télécharger le PDF
-        </a>
-        <a href="bulletins.php?classe_id=<?php echo $classe_id; ?>" class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-            <i class="fas fa-arrow-left mr-2"></i> Retour
-        </a>
+    
+    <!-- Appréciation générale -->
+    <div style="border: 1px solid #ddd; padding: 12px; background-color: #f9f9f9;">
+        <h4 style="margin: 0 0 10px 0; font-size: 14px; color: #333; padding-bottom: 5px;">
+            APPRÉCIATION GÉNÉRALE
+        </h4>
+        <div style="min-height: 60px; padding: 8px; font-size: 13px; line-height: 1.5;">
+            <?= nl2br(htmlspecialchars($appreciation)) ?>
+        </div>
     </div>
+    <div style="margin-top: 20px;"></div>
+    <!-- Signatures -->
+    <table class="signatures">
+        <tr>
+            <td>Le Directeur<br><br>__________________________</td>
+            <td>Le Titulaire de classe<br><br>__________________________</td>
+        </tr>
+    </table>
+
+    <!-- Pied de page -->
+    <div class="footer">
+        <br>
+        <em>Fait à <?= htmlspecialchars($ecole['ville']) ?>, le <?= date('d/m/Y') ?></em>
+        <br>
+        <em><?= htmlspecialchars($ecole['nom']) ?> - <?= htmlspecialchars($ecole['ville']) ?> - <?= htmlspecialchars($ecole['pays']) ?></em>
+        <br>
+        <em>Tel : 23300208</em> <span style="margin-left: 10px;">BP : 220</span>
+
+    </div>
+
 </body>
 </html>

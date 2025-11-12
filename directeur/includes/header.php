@@ -206,10 +206,6 @@ $directeur_url = $base_url . '/directeur';
                                         <i class="fas fa-file-alt mr-2 text-blue-600"></i>
                                         Bulletins de notes
                                     </a>
-                                    <a href="<?php echo $directeur_url; ?>/proclamations.php" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-                                        <i class="fas fa-scroll mr-2 text-blue-600"></i>
-                                        Fiches de proclamation
-                                    </a>
                                 </div>
                             </div>
                         </div>

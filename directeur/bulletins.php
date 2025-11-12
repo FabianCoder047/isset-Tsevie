@@ -2,9 +2,12 @@
 $pageTitle = 'Gestion des bulletins de notes';
 include 'includes/header.php';
 
-// Activer l'affichage des erreurs pour le débogage
+// Ajouter le script pour la gestion des exports PDF
+echo '<script src="js/bulletin_pdf.js"></script>';
+
+// Configuration des erreurs
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', 0); // Désactiver l'affichage des erreurs en production
 
 // Initialiser les variables
 $classes = [];
@@ -45,6 +48,10 @@ $eleves = [];
 $matieres = [];
 $bulletins = [];
 
+// Configuration des erreurs (désactivé en production)
+ini_set('display_errors', 0);
+ini_set('display_startup_errors', 0);
+
 // Si une classe et une période sont sélectionnées
 if ($classe_id > 0 && $periode_id > 0) {
     try {
@@ -83,96 +90,101 @@ if ($classe_id > 0 && $periode_id > 0) {
             $eleve_ids = array_column($eleves, 'id');
             $matiere_ids = array_column($matieres, 'id');
             
-            // Préparer les placeholders pour la requête SQL
-            $placeholders = rtrim(str_repeat('?,', count($eleve_ids)), ',');
-            $matiere_placeholders = rtrim(str_repeat('?,', count($matiere_ids)), ',');
+            // Déterminer le semestre en fonction du nom de la période
+            $semestre = 1; // Par défaut, premier semestre
+            if ($periode_courante && preg_match('/2|deuxi[eè]me|second/i', $periode_courante['nom'])) {
+                $semestre = 2;
+            }
             
-            // Récupérer les notes avec les informations des élèves et des matières
-            $query = "SELECT n.*, m.nom as matiere_nom, e.nom as eleve_nom, e.prenom as eleve_prenom, 
-                             m.coefficient as coefficient
-                      FROM notes n 
-                      LEFT JOIN matieres m ON n.matiere_id = m.id 
-                      LEFT JOIN eleves e ON n.eleve_id = e.id 
-                      WHERE n.eleve_id IN ($placeholders) 
-                      AND n.matiere_id IN ($matiere_placeholders)
-                      AND n.semestre = ?
-                      AND n.classe_id = ?
-                      ORDER BY e.nom, e.prenom, m.nom";
-            
-            $params = array_merge($eleve_ids, $matiere_ids, [$semestre, $classe_id]);
+            // Requête plus simple pour tester
+            $query = "SELECT n.*, m.nom as matiere_nom, m.coefficient 
+                     FROM notes n
+                     JOIN matieres m ON n.matiere_id = m.id
+                     WHERE n.classe_id = ? AND n.semestre = ?";
+            $params = [$classe_id, $semestre];
             
             try {
                 $stmt = $db->prepare($query);
-                $stmt->execute($params);
-                $notes_result = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                
-                // Initialiser le tableau des bulletins avec des valeurs par défaut
-                foreach ($eleve_ids as $eleve_id) {
-                    $eleve = array_filter($eleves, function($e) use ($eleve_id) {
-                        return $e['id'] == $eleve_id;
-                    });
-                    $eleve = reset($eleve);
-                    
-                    $bulletins[$eleve_id] = [
-                        'eleve_id' => $eleve_id,
-                        'eleve_nom' => $eleve['nom'] . ' ' . $eleve['prenom'],
-                        'matieres' => []
-                    ];
-                    
-                    foreach ($matieres as $matiere) {
-                        $note_data = [
-                            'matiere_id' => $matiere['id'],
-                            'matiere_nom' => $matiere['nom'],
-                            'coefficient' => $matiere['coefficient'],
-                            'interro1' => null,
-                            'interro2' => null,
-                            'devoir' => null,
-                            'compo' => null,
-                            'moyenne' => null
-                        ];
-                        
-                        // Chercher si une note existe pour cet élève et cette matière
-                        foreach ($notes_result as $note) {
-                            if ($note['eleve_id'] == $eleve_id && $note['matiere_id'] == $matiere['id']) {
-                                $note_data['interro1'] = $note['interro1'];
-                                $note_data['interro2'] = $note['interro2'];
-                                $note_data['devoir'] = $note['devoir'];
-                                $note_data['compo'] = $note['compo'];
-                                
-                                // Calculer la moyenne
-                                $somme = 0;
-                                $nb_notes = 0;
-                                
-                                if (!is_null($note['interro1'])) {
-                                    $somme += $note['interro1'];
-                                    $nb_notes++;
-                                }
-                                if (!is_null($note['interro2'])) {
-                                    $somme += $note['interro2'];
-                                    $nb_notes++;
-                                }
-                                if (!is_null($note['devoir'])) {
-                                    $somme += $note['devoir'];
-                                    $nb_notes++;
-                                }
-                                if (!is_null($note['compo'])) {
-                                    $somme += $note['compo'] * 2; // La composition compte double
-                                    $nb_notes += 2;
-                                }
-                                
-                                if ($nb_notes > 0) {
-                                    $moyenne = $somme / $nb_notes;
-                                    $note_data['moyenne'] = number_format($moyenne, 2, ',', ' ');
-                                }
-                                
-                                break;
-                            }
-                        }
-                        
-                        $bulletins[$eleve_id]['matieres'][$matiere['id']] = $note_data;
-                    }
+                if (!$stmt) {
+                    throw new Exception("Erreur de préparation de la requête");
                 }
                 
+                $result = $stmt->execute($params);
+                if ($result === false) {
+                    throw new Exception("Erreur lors de l'exécution de la requête");
+                }
+                
+                $notes_result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                $bulletins = []; // Initialiser le tableau des bulletins
+                
+                // Si on a des résultats, les traiter
+                if (!empty($notes_result) && !empty($eleves) && !empty($matieres)) {
+                    foreach ($eleves as $eleve) {
+                        $eleve_id = $eleve['id'];
+                        $bulletins[$eleve_id] = [
+                            'eleve_id' => $eleve_id,
+                            'eleve_nom' => $eleve['nom'] . ' ' . $eleve['prenom'],
+                            'matieres' => []
+                        ];
+                        
+                        // Initialiser les notes pour chaque matière
+                        foreach ($matieres as $matiere) {
+                            $note_data = [
+                                'matiere_id' => $matiere['id'],
+                                'matiere_nom' => $matiere['nom'],
+                                'coefficient' => $matiere['coefficient'] ?? 1,
+                                'interro1' => null,
+                                'interro2' => null,
+                                'devoir' => null,
+                                'compo' => null,
+                                'moyenne' => null
+                            ];
+                            
+                            // Chercher les notes pour cet élève et cette matière
+                            foreach ($notes_result as $note) {
+                                if (isset($note['eleve_id'], $note['matiere_id']) && 
+                                    $note['eleve_id'] == $eleve_id && 
+                                    $note['matiere_id'] == $matiere['id']) {
+                                    
+                                    $note_data['interro1'] = $note['interro1'] ?? null;
+                                    $note_data['interro2'] = $note['interro2'] ?? null;
+                                    $note_data['devoir'] = $note['devoir'] ?? null;
+                                    $note_data['compo'] = $note['compo'] ?? null;
+                                    
+                                    // Calculer la moyenne
+                                    $somme = 0;
+                                    $nb_notes = 0;
+                                    
+                                    if (!empty($note['interro1'])) {
+                                        $somme += (float)$note['interro1'];
+                                        $nb_notes++;
+                                    }
+                                    if (!empty($note['interro2'])) {
+                                        $somme += (float)$note['interro2'];
+                                        $nb_notes++;
+                                    }
+                                    if (!empty($note['devoir'])) {
+                                        $somme += (float)$note['devoir'];
+                                        $nb_notes++;
+                                    }
+                                    if (!empty($note['compo'])) {
+                                        $somme += (float)$note['compo'] * 2; // La composition compte double
+                                        $nb_notes += 2;
+                                    }
+                                    
+                                    if ($nb_notes > 0) {
+                                        $moyenne = $somme / $nb_notes;
+                                        $note_data['moyenne'] = number_format($moyenne, 2, ',', ' ');
+                                    }
+                                    
+                                    break;
+                                }
+                            }
+                            
+                            $bulletins[$eleve_id]['matieres'][$matiere['id']] = $note_data;
+                        }
+                    }
+                }
             } catch (PDOException $e) {
                 error_log("Erreur lors de la récupération des notes: " . $e->getMessage());
                 $error = "Une erreur est survenue lors du chargement des notes: " . $e->getMessage();
@@ -247,11 +259,23 @@ echo '                    <i class="fas fa-search mr-2"></i> Afficher';
 echo '                </button>';
 
 if ($classe_id > 0 && $periode_id > 0 && !empty($eleves)) {
-    echo '                <a href="generer_bulletin_pdf.php?classe_id=' . $classe_id . '&periode_id=' . $periode_id . '" ';
-    echo '                   target="_blank"';
-    echo '                   class="ml-2 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">';
-    echo '                    <i class="fas fa-file-pdf mr-2"></i> Générer PDF';
-    echo '                </a>';
+    // Récupérer le nom de la classe pour le nom du fichier
+    $classe_nom = '';
+    $classe_nom_query = $db->prepare("SELECT CONCAT(niveau, '_', nom) as nom_classe FROM classes WHERE id = ?");
+    if ($classe_nom_query->execute([$classe_id])) {
+        $classe = $classe_nom_query->fetch(PDO::FETCH_ASSOC);
+        $classe_nom = $classe ? $classe['nom_classe'] : '';
+    }
+    
+    echo '                <div class="flex space-x-2 ml-2">';
+    echo '                    <button id="export-classe-pdf" ';
+    echo '                            data-classe="' . $classe_id . '" ';
+    echo '                            data-periode="' . $periode_id . '" ';
+    echo '                            data-classe-nom="' . htmlspecialchars($classe_nom) . '" ';
+    echo '                            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">';
+    echo '                        <i class="fas fa-file-pdf mr-2"></i> Exporter les bulletins';
+    echo '                    </button>';
+    echo '                </div>';
 }
 
 echo '            </div>';
@@ -355,16 +379,11 @@ if ($classe_id > 0 && $periode_id > 0) {
                 echo '                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">';
                 
                 if ($has_notes) {
-                    echo '                        <a href="voir_bulletin.php?eleve_id=' . $eleve['id'] . '&classe_id=' . $classe_id . '&periode_id=' . $periode_id . '" ';
-                    echo '                           class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"';
-                    echo '                           title="Voir le bulletin">';
-                    echo '                            <i class="fas fa-eye mr-1"></i> Voir';
-                    echo '                        </a>';
                     echo '                        <a href="generer_bulletin_pdf.php?eleve_id=' . $eleve['id'] . '&classe_id=' . $classe_id . '&periode_id=' . $periode_id . '" ';
-                    echo '                           class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"';
-                    echo '                           title="Télécharger le PDF"';
-                    echo '                           target="_blank">';
-                    echo '                            <i class="fas fa-file-pdf mr-1"></i> PDF';
+                    echo '                           class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"';
+                    echo '                           target="_blank"';
+                    echo '                           title="Télécharger le bulletin">';
+                    echo '                            <i class="fas fa-file-pdf mr-1"></i> Télécharger';
                     echo '                        </a>';
                 } else {
                     echo '                        <span class="text-gray-400 text-sm">-</span>';
@@ -390,8 +409,12 @@ if ($classe_id > 0 && $periode_id > 0) {
     echo '<div class="bg-white p-6 rounded-lg shadow">';
     echo '    <div class="text-center">';
     echo '        <i class="fas fa-clipboard-list text-4xl text-gray-400 mb-4"></i>';
-    echo '        <h3 class="text-lg font-medium text-gray-900 mb-2">Aucune sélection</h3>';
-    echo '        <p class="text-gray-500">Veuillez sélectionner une classe et une période pour afficher les bulletins de notes.</p>';
+    echo '        <div class="bg-white p-6 rounded-lg shadow mb-8">';
+    echo '            <div class="text-center">';
+    echo '                <h3 class="text-lg font-medium text-gray-900 mb-2">Aucune sélection</h3>';
+    echo '                <p class="text-gray-500">Veuillez sélectionner une classe et une période pour afficher les bulletins de notes.</p>';
+    echo '            </div>';
+    echo '        </div>';
     echo '    </div>';
     echo '</div>';
 }

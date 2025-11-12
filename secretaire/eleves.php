@@ -121,21 +121,18 @@ include __DIR__ . '/includes/header.php';
                                     <?php echo htmlspecialchars($eleve['sexe'] ?? ''); ?>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    <?php echo htmlspecialchars($eleve['classe_nom'] ?? 'Non affecté'); ?>
+                                    <?php echo htmlspecialchars($eleve['classe_nom'] . ' ' . $eleve['classe_niveau'] ?? 'Non affecté'); ?>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                     <?php echo !empty($eleve['contact_parent']) ? htmlspecialchars($eleve['contact_parent']) : 'Non spécifié'; ?>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                     <div class="flex justify-end space-x-2">
-                                        <a href="#" class="text-blue-600 hover:text-blue-900 mr-3">
-                                            <i class="fas fa-eye"></i>
-                                        </a>
-                                        <a href="#" class="text-yellow-600 hover:text-yellow-900 mr-3">
+                                        <a href="modifier_eleve.php?id=<?php echo $eleve['id']; ?>" class="text-yellow-600 hover:text-yellow-900 mr-3" title="Modifier">
                                             <i class="fas fa-edit"></i>
                                         </a>
-                                        <a href="#" class="text-red-600 hover:text-red-900" 
-                                           onclick="return confirm('Êtes-vous sûr de vouloir supprimer cet élève ?');">
+                                        <a href="supprimer_eleve.php?id=<?php echo $eleve['id']; ?>" class="text-red-600 hover:text-red-900" 
+                                           onclick="return confirm('Êtes-vous sûr de vouloir supprimer cet élève ?');" title="Supprimer">
                                             <i class="fas fa-trash"></i>
                                         </a>
                                     </div>
