@@ -445,63 +445,116 @@ try {
         // Si on a généré un seul fichier, le renvoyer directement
         if (count($generated_files) === 1) {
             $file = $generated_files[0];
-            header('Content-Type: application/pdf');
-            header('Content-Disposition: attachment; filename="' . $file['name'] . '"');
-            readfile($file['path']);
-            unlink($file['path']); // Supprimer le fichier temporaire
-            exit;
+            if (file_exists($file['path'])) {
+                // Envoyer le fichier PDF unique
+                header('Content-Type: application/pdf');
+                header('Content-Disposition: attachment; filename="' . $file['name'] . '"');
+                header('Content-Length: ' . filesize($file['path']));
+                readfile($file['path']);
+                unlink($file['path']);
+                exit;
+            } else {
+                throw new Exception("Le fichier PDF n'a pas pu être trouvé : " . $file['path']);
+            }
         } 
-        // Si on a plusieurs fichiers, créer une archive ZIP
+        // Si on a plusieurs fichiers, créer un ZIP
         else if (count($generated_files) > 1) {
+            // Vérifier que l'extension ZIP est disponible
+            if (!class_exists('ZipArchive')) {
+                throw new Exception("L'extension PHP Zip n'est pas installée ou activée sur le serveur.");
+            }
+            
             $zip = new ZipArchive();
             $zip_name = 'Bulletins_Classe_' . $classe_id . '_' . date('Y-m-d') . '.zip';
             $zip_path = sys_get_temp_dir() . '/' . uniqid('bulletins_', true) . '.zip';
             
-            if ($zip->open($zip_path, ZipArchive::CREATE) === TRUE) {
-                foreach ($generated_files as $file) {
-                    $zip->addFile($file['path'], $file['name']);
+            // Vérifier que le répertoire temporaire est accessible en écriture
+            if (!is_writable(sys_get_temp_dir())) {
+                throw new Exception("Le répertoire temporaire n'est pas accessible en écriture : " . sys_get_temp_dir());
+            }
+            
+            // Vérifier que tous les fichiers PDF existent avant de créer le ZIP
+            foreach ($generated_files as $file) {
+                if (!file_exists($file['path'])) {
+                    throw new Exception("Le fichier PDF n'a pas pu être généré : " . $file['path']);
                 }
-                $zip->close();
-                
-                // Envoyer le fichier ZIP en tant que réponse binaire
-                header('Content-Type: application/octet-stream');
-                header('Content-Disposition: attachment; filename="' . $zip_name . '"');
-                header('Content-Length: ' . filesize($zip_path));
-                header('Content-Transfer-Encoding: binary');
-                
-                // Lire et envoyer le fichier par morceaux pour éviter les problèmes de mémoire
-                $handle = fopen($zip_path, 'rb');
-                while (!feof($handle)) {
-                    echo fread($handle, 8192);
-                    ob_flush();
-                    flush();
-                }
-                fclose($handle);
-                
-                // Supprimer les fichiers temporaires
-                unlink($zip_path);
-                foreach ($generated_files as $file) {
-                    if (file_exists($file['path'])) {
-                        @unlink($file['path']);
+            }
+            
+            // Créer le fichier ZIP
+            if ($zip->open($zip_path, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== TRUE) {
+                throw new Exception("Impossible de créer le fichier ZIP à l'emplacement : " . $zip_path);
+            }
+            
+            // Ajouter chaque fichier au ZIP
+            foreach ($generated_files as $file) {
+                if (file_exists($file['path'])) {
+                    if (!$zip->addFile($file['path'], $file['name'])) {
+                        $zip->close();
+                        throw new Exception("Impossible d'ajouter le fichier au ZIP : " . $file['path']);
                     }
                 }
-                exit;
-            } else {
-                throw new Exception("Impossible de créer l'archive ZIP des bulletins.");
             }
+            
+            // Fermer le ZIP
+            if (!$zip->close()) {
+                throw new Exception("Erreur lors de la fermeture de l'archive ZIP");
+            }
+            
+            // Vérifier que le fichier ZIP a été créé
+            if (!file_exists($zip_path)) {
+                throw new Exception("L'archive ZIP n'a pas pu être créée");
+            }
+            
+            // Vider tous les tampons de sortie
+            if (ob_get_level()) {
+                ob_end_clean();
+            }
+            
+            // Désactiver la compression pour le téléchargement
+            if (ini_get('zlib.output_compression')) {
+                ini_set('zlib.output_compression', 'Off');
+            }
+            
+            // Envoyer les en-têtes HTTP
+            header('Pragma: public');
+            header('Expires: 0');
+            header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
+            header('Cache-Control: private', false);
+            header('Content-Type: application/zip');
+            header('Content-Disposition: attachment; filename="' . $zip_name . '"');
+            header('Content-Length: ' . filesize($zip_path));
+            header('Content-Transfer-Encoding: binary');
+            
+            // Lire et envoyer le fichier par morceaux
+            $chunk_size = 1024 * 1024; // 1MB par morceau
+            $handle = fopen($zip_path, 'rb');
+            if ($handle === false) {
+                throw new Exception("Impossible d'ouvrir le fichier ZIP pour lecture");
+            }
+            
+            while (!feof($handle)) {
+                echo fread($handle, $chunk_size);
+                ob_flush();
+                flush();
+            }
+            
+            fclose($handle);
+            
+            // Supprimer les fichiers temporaires
+            @unlink($zip_path);
+            foreach ($generated_files as $file) {
+                if (file_exists($file['path'])) {
+                    @unlink($file['path']);
+                }
+            }
+            
+            exit;
         }
-        
-    } else {
-        // Exporter un seul élève
-        $data = genererBulletinEleve($db, $eleve_id, $classe_id, $periode_id);
-        $html = genererHtmlBulletin($data);
-        
-        // Le filigrane sera ajouté automatiquement via la méthode Header()
-        $pdf->AddPage();
-        
-        // Générer le contenu du bulletin
-        $pdf->writeHTML($html, true, false, true, false, '');
-    }
+    } // Fin du if (!empty($export_type))
+    
+    // Si on arrive ici, c'est qu'on a un seul élève à exporter
+    $data = genererBulletinEleve($db, $eleve_id, $classe_id, $periode_id);
+    $html = genererHtmlBulletin($data);
     
     // Générer un nom de fichier approprié avec le nom de l'élève
     if (!empty($export_type) && $export_type === 'classe') {
@@ -534,24 +587,12 @@ try {
     header('Pragma: no-cache');
     header('Expires: 0');
     
-    // Forcer le téléchargement avec le bon type MIME
-    header('Content-Type: application/force-download');
-    header('Content-Type: application/octet-stream', false);
-    header('Content-Type: application/download', false);
-    header('Content-Type: application/pdf', false);
+    // Ajouter le contenu au PDF
+    $pdf->AddPage();
+    $pdf->writeHTML($html, true, false, true, false, '');
     
-    // Définir les en-têtes pour le téléchargement
-    header('Content-Disposition: attachment; filename="' . $filename . '"');
-    header('Content-Transfer-Encoding: binary');
-    
-    // Si c'est une requête POST, on force le téléchargement
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['force_download'])) {
-        // Envoyer le contenu du PDF directement
-        $pdf->Output($filename, 'D');
-    } else {
-        // Pour les requêtes GET, afficher dans le navigateur
-        $pdf->Output($filename, 'I');
-    }
+    // Envoyer le PDF au navigateur
+    $pdf->Output($filename, 'D');
     exit;
 
 } catch (Exception $e) {
